@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   process:
+    if: contains(github.event.issue.title, 'anubis')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
