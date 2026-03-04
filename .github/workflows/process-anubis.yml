@@ -1,0 +1,99 @@
+name: Process Anubis Zip
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Extract zip URL from issue body
+        id: extract
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          # Match GitHub attachment URLs ending in .zip
+          ZIP_URL=$(echo "$ISSUE_BODY" | grep -oP 'https://github\.com/[^\s\)\]]+\.zip' | head -1)
+          if [ -z "$ZIP_URL" ]; then
+            echo "No .zip attachment URL found in issue body"
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "url=$ZIP_URL" >> "$GITHUB_OUTPUT"
+          echo "found=true" >> "$GITHUB_OUTPUT"
+          echo "Found zip URL: $ZIP_URL"
+
+      - name: Post skip comment
+        if: steps.extract.outputs.found == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --body "未在 Issue 正文中找到 .zip 附件链接，跳过处理。"
+
+      - name: Download zip
+        if: steps.extract.outputs.found == 'true'
+        run: |
+          curl -L -o anubis_upload.zip "${{ steps.extract.outputs.url }}"
+          ls -la anubis_upload.zip
+
+      - name: Process zip
+        if: steps.extract.outputs.found == 'true'
+        id: process
+        run: |
+          python -c "
+          from process_anubis_zip import process_zip
+          date_dir, url_file, count = process_zip('anubis_upload.zip')
+          print(f'date_dir={date_dir}')
+          print(f'url_file={url_file}')
+          print(f'count={count}')
+          # Write outputs
+          import os
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f'date_dir={date_dir}\n')
+              f.write(f'url_file={url_file}\n')
+              f.write(f'count={count}\n')
+          "
+
+      - name: Commit and push
+        if: steps.extract.outputs.found == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add anubisdate/
+          git commit -m "Add anubis data ${{ steps.process.outputs.date_dir }}"
+          git push
+
+      - name: Comment url.txt on issue
+        if: steps.extract.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          URL_CONTENT=$(cat "${{ steps.process.outputs.url_file }}")
+          gh issue comment ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --body "处理完成！共 ${{ steps.process.outputs.count }} 个文件。
+
+          \`\`\`
+          ${URL_CONTENT}
+          \`\`\`"
+
+      - name: Close issue
+        if: steps.extract.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue close ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }}
