@@ -17,7 +17,8 @@ from dotenv import load_dotenv
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
-from process_anubis_zip import process_zip
+from process_anubis_zip import process_zip as process_anubis
+from process_ox_txt import process_file as process_ox
 
 load_dotenv()
 
@@ -29,6 +30,12 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 def is_anubis_zip(filename: str) -> bool:
     """文件名含 anubis 且以 .zip 结尾。"""
     return "anubis" in filename.lower() and filename.lower().endswith(".zip")
+
+
+def is_ox_file(filename: str) -> bool:
+    """文件名含 ox 且以 .txt 或 .zip 结尾。"""
+    lower = filename.lower()
+    return "ox" in lower and (lower.endswith(".txt") or lower.endswith(".zip"))
 
 
 def download_file(client, url: str, dest: str):
@@ -58,43 +65,52 @@ def handle_message(event, client, say):
 
     for file_info in files:
         filename = file_info.get("name", "")
-        if not is_anubis_zip(filename):
-            continue
-
         channel = event["channel"]
-        user = event.get("user", "unknown")
         thread_ts = event.get("ts")
 
+        # 判断文件类型
+        if is_anubis_zip(filename):
+            game_type = "anubis"
+        elif is_ox_file(filename):
+            game_type = "ox"
+        else:
+            continue
+
         say(
-            text=f"检测到 `{filename}`，正在处理...",
+            text=f"检测到 `{filename}`，正在处理 ({game_type})...",
             channel=channel,
             thread_ts=thread_ts,
         )
 
         try:
-            # 下载 zip 到临时文件
+            # 下载文件到临时目录
             download_url = file_info["url_private_download"]
-            tmp_zip = os.path.join(tempfile.gettempdir(), filename)
-            download_file(client, download_url, tmp_zip)
+            tmp_file = os.path.join(tempfile.gettempdir(), filename)
+            download_file(client, download_url, tmp_file)
 
             # 处理数据
-            date_dir, url_file, count = process_zip(tmp_zip)
+            if game_type == "anubis":
+                date_dir, url_file, count = process_anubis(tmp_file)
+                data_dir_name = "anubisdate"
+            else:
+                date_dir, url_file, count = process_ox(tmp_file)
+                data_dir_name = "oxdate"
 
             # 推送到 GitHub
-            git_push(f"Add anubis data {date_dir}")
+            git_push(f"Add {game_type} data {date_dir}")
 
             # 读取 url.txt 内容并回复
             with open(url_file, "r", encoding="utf-8") as f:
                 url_content = f.read().strip()
 
             say(
-                text=f"处理完成！共 {count} 个文件，目录: `anubisdate/{date_dir}/`\n\n```\n{url_content}\n```",
+                text=f"处理完成！共 {count} 个文件，目录: `{data_dir_name}/{date_dir}/`\n\n```\n{url_content}\n```",
                 channel=channel,
                 thread_ts=thread_ts,
             )
 
             # 清理临时文件
-            os.remove(tmp_zip)
+            os.remove(tmp_file)
 
         except Exception as e:
             say(
@@ -105,6 +121,6 @@ def handle_message(event, client, say):
 
 
 if __name__ == "__main__":
-    print("Slack Bot 已启动，等待 anubis zip 文件...")
+    print("Slack Bot 已启动，等待 anubis/ox 文件...")
     handler = SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
     handler.start()
