@@ -1,0 +1,102 @@
+name: Process Tiger Data
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  process:
+    if: contains(github.event.issue.title, 'tiger')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Extract attachment URL from issue body
+        id: extract
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          # Match GitHub attachment URLs ending in .txt or .zip
+          FILE_URL=$(echo "$ISSUE_BODY" | grep -oP 'https://github\.com/[^\s\)\]]+\.(txt|zip)' | head -1)
+          if [ -z "$FILE_URL" ]; then
+            echo "No .txt/.zip attachment URL found in issue body"
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "url=$FILE_URL" >> "$GITHUB_OUTPUT"
+          echo "found=true" >> "$GITHUB_OUTPUT"
+          # 获取文件扩展名
+          EXT="${FILE_URL##*.}"
+          echo "ext=$EXT" >> "$GITHUB_OUTPUT"
+          echo "Found file URL: $FILE_URL (type: $EXT)"
+
+      - name: Post skip comment
+        if: steps.extract.outputs.found == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --body "未在 Issue 正文中找到 .txt 或 .zip 附件链接，跳过处理。"
+
+      - name: Download file
+        if: steps.extract.outputs.found == 'true'
+        run: |
+          curl -L -o "tiger_upload.${{ steps.extract.outputs.ext }}" "${{ steps.extract.outputs.url }}"
+          ls -la tiger_upload.*
+
+      - name: Process file
+        if: steps.extract.outputs.found == 'true'
+        id: process
+        run: |
+          python -c "
+          from process_tiger_txt import process_file
+          date_dir, url_file, count = process_file('tiger_upload.${{ steps.extract.outputs.ext }}')
+          print(f'date_dir={date_dir}')
+          print(f'url_file={url_file}')
+          print(f'count={count}')
+          import os
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f'date_dir={date_dir}\n')
+              f.write(f'url_file={url_file}\n')
+              f.write(f'count={count}\n')
+          "
+
+      - name: Commit and push
+        if: steps.extract.outputs.found == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add tigerdate/
+          git commit -m "Add tiger data ${{ steps.process.outputs.date_dir }}"
+          git push
+
+      - name: Comment url.txt on issue
+        if: steps.extract.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          URL_CONTENT=$(cat "${{ steps.process.outputs.url_file }}")
+          gh issue comment ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --body "处理完成！共 ${{ steps.process.outputs.count }} 个文件。
+
+          \`\`\`
+          ${URL_CONTENT}
+          \`\`\`"
+
+      - name: Close issue
+        if: steps.extract.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue close ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }}

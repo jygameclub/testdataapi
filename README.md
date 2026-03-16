@@ -2,7 +2,7 @@
 
 游戏测试数据自动处理工具，支持通过 GitHub Issue 或 Slack 上传数据文件，自动转换格式、生成调试链接。
 
-目前支持的游戏：**Anubis**、**Fortune-Ox**
+目前支持的游戏：**Anubis**、**Fortune-Ox**、**Fortune-Tiger**
 
 ---
 
@@ -21,16 +21,22 @@ testdataapi/
 │   └── 0313_1530/       #   批次目录
 │       ├── data.txt
 │       └── url.txt
+├── tigerdate/           # Fortune-Tiger 按批次存放的转换结果
+│   └── 0316_1200/       #   批次目录
+│       ├── data.txt
+│       └── url.txt
 ├── update/              # 手动上传文件暂存目录
 ├── process_anubis_zip.py    # Anubis 数据处理核心
 ├── process_ox_txt.py        # Fortune-Ox 数据处理核心
+├── process_tiger_txt.py     # Fortune-Tiger 数据处理核心
 ├── convert_anubis.py        # Anubis 格式转换（独立使用）
 ├── convert_anubis0304.py    # Anubis 0304格式转换
 ├── ox.PY                    # Fortune-Ox 格式转换（独立使用）
 ├── slack_bot.py             # Slack Bot 自动处理
 └── .github/workflows/
     ├── process-anubis.yml   # Anubis GitHub Actions
-    └── process-ox.yml       # Fortune-Ox GitHub Actions
+    ├── process-ox.yml       # Fortune-Ox GitHub Actions
+    └── process-tiger.yml    # Fortune-Tiger GitHub Actions
 ```
 
 ---
@@ -117,6 +123,50 @@ python process_ox_txt.py
 
 ---
 
+## Fortune-Tiger
+
+### 支持的数据格式
+
+| 格式 | 结构 |
+|------|------|
+| 格式A | `{"code": 200, "data": {...}}`（data 直接是 spin 数据，无 dt.si 嵌套） |
+| 格式B | `{"dt": {"si": {...}}}` |
+
+Tiger 的 `rl` 数组为 9 个位置（3x3 布局），与 Ox 的 12 个位置不同。同时自动修复不完整的 JSON。
+
+### 上传方式
+
+#### 方式一：GitHub Issue（自动）
+
+1. 在仓库创建新 Issue
+2. **标题**包含 `tiger`（如：`上传 tiger 数据`）
+3. **正文**中拖入 `.txt` 或 `.zip` 附件
+4. 创建后 GitHub Actions 自动处理并返回链接
+
+#### 方式二：Slack（自动）
+
+1. 在 Slack 频道上传文件
+2. 文件名包含 `tiger` 且以 `.txt` 或 `.zip` 结尾
+3. Bot 自动处理并回复链接
+
+#### 方式三：本地手动
+
+```bash
+# 将 txt 或 zip 放入 update/ 目录，文件名以 tiger 开头
+python process_tiger_txt.py
+```
+
+### 输出结果
+
+处理后在 `tigerdate/{MMDD_HHMM}/` 生成：
+
+- **数据文件** — 转换后的 spin 数据
+- **url.txt** — 包含：
+  - 原始数据链接：`https://raw.githubusercontent.com/jygameclub/testdataapi/main/tigerdate/{批次}/{文件名}`
+  - 游戏调试链接：`https://fish-games.s3.amazonaws.com/Fortune-Tiger/index.html?...&debugDataUrl={数据链接}&debugStart=1`
+
+---
+
 ## 数据转换字段说明
 
 转换过程会从原始 spin 数据中提取 `si` 对象，并添加以下计算字段：
@@ -145,4 +195,4 @@ python process_ox_txt.py
 2. 安装依赖：`pip install -r requirements.txt`
 3. 启动：`python slack_bot.py`
 
-Bot 同时监听 Anubis（`.zip`）和 Fortune-Ox（`.txt` / `.zip`）文件上传。
+Bot 同时监听 Anubis（`.zip`）、Fortune-Ox（`.txt` / `.zip`）和 Fortune-Tiger（`.txt` / `.zip`）文件上传。

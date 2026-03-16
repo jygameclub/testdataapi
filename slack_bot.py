@@ -19,6 +19,7 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 
 from process_anubis_zip import process_zip as process_anubis
 from process_ox_txt import process_file as process_ox
+from process_tiger_txt import process_file as process_tiger
 
 load_dotenv()
 
@@ -36,6 +37,12 @@ def is_ox_file(filename: str) -> bool:
     """文件名含 ox 且以 .txt 或 .zip 结尾。"""
     lower = filename.lower()
     return "ox" in lower and (lower.endswith(".txt") or lower.endswith(".zip"))
+
+
+def is_tiger_file(filename: str) -> bool:
+    """文件名含 tiger 且以 .txt 或 .zip 结尾。"""
+    lower = filename.lower()
+    return "tiger" in lower and (lower.endswith(".txt") or lower.endswith(".zip"))
 
 
 def download_file(client, url: str, dest: str):
@@ -73,6 +80,8 @@ def handle_message(event, client, say):
             game_type = "anubis"
         elif is_ox_file(filename):
             game_type = "ox"
+        elif is_tiger_file(filename):
+            game_type = "tiger"
         else:
             continue
 
@@ -92,9 +101,12 @@ def handle_message(event, client, say):
             if game_type == "anubis":
                 date_dir, url_file, count = process_anubis(tmp_file)
                 data_dir_name = "anubisdate"
-            else:
+            elif game_type == "ox":
                 date_dir, url_file, count = process_ox(tmp_file)
                 data_dir_name = "oxdate"
+            else:
+                date_dir, url_file, count = process_tiger(tmp_file)
+                data_dir_name = "tigerdate"
 
             # 推送到 GitHub
             git_push(f"Add {game_type} data {date_dir}")
@@ -121,6 +133,6 @@ def handle_message(event, client, say):
 
 
 if __name__ == "__main__":
-    print("Slack Bot 已启动，等待 anubis/ox 文件...")
+    print("Slack Bot 已启动，等待 anubis/ox/tiger 文件...")
     handler = SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
     handler.start()
