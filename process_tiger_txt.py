@@ -17,7 +17,7 @@ from datetime import datetime
 # GitHub 仓库信息
 GITHUB_RAW_BASE = "https://raw.githubusercontent.com/jygameclub/testdataapi/main"
 GAME_URL_BASE = (
-    "https://fish-games.s3.amazonaws.com/Fortune-Tiger/index.html"
+    "https://fish-games.s3.amazonaws.com/tiger/index.html"
     "?env=ceshislot.osshaiwai.com&hasFloat=0"
     "&token=b3bb96ff1faef019504b83495ec3e45a"
     "&language=en&debug=1"

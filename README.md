@@ -163,7 +163,7 @@ python process_tiger_txt.py
 - **数据文件** — 转换后的 spin 数据
 - **url.txt** — 包含：
   - 原始数据链接：`https://raw.githubusercontent.com/jygameclub/testdataapi/main/tigerdate/{批次}/{文件名}`
-  - 游戏调试链接：`https://fish-games.s3.amazonaws.com/Fortune-Tiger/index.html?...&debugDataUrl={数据链接}&debugStart=1`
+  - 游戏调试链接：`https://fish-games.s3.amazonaws.com/tiger/index.html?...&debugDataUrl={数据链接}&debugStart=1`
 
 ---
 
