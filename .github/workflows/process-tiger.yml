@@ -95,13 +95,16 @@ jobs:
           import sys, os
           try:
               from process_tiger_txt import process_file
-              date_dir, url_file, count = process_file('tiger_upload.${{ steps.extract.outputs.ext }}')
+              date_dir, url_file, count, analysis_md = process_file('tiger_upload.${{ steps.extract.outputs.ext }}')
               if count == 0:
                   print('::error::处理完成但未生成任何有效记录')
                   with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
                       f.write('success=false\n')
                       f.write('error=文件内容无法解析为有效的 tiger 数据，请检查数据格式是否正确\n')
                   sys.exit(0)
+              # 将分析结果写入临时文件（避免多行输出问题）
+              with open('analysis_result.md', 'w', encoding='utf-8') as af:
+                  af.write(analysis_md)
               with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
                   f.write(f'date_dir={date_dir}\n')
                   f.write(f'url_file={url_file}\n')
@@ -162,12 +165,16 @@ jobs:
           - 仅支持 \`.txt\` 和 \`.zip\` 格式（\`.json\`, \`.csv\` 等无法处理）
           - 请确保 JSON 格式正确，无多余逗号或缺失括号"
 
+      - name: Update README navigation
+        if: steps.extract.outputs.found == 'true' && steps.process.outputs.success == 'true'
+        run: python generate_nav.py
+
       - name: Commit and push
         if: steps.extract.outputs.found == 'true' && steps.process.outputs.success == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add tigerdate/
+          git add tigerdate/ README.md
           git commit -m "Add tiger data ${{ steps.process.outputs.date_dir }}"
           git push
 
@@ -183,6 +190,7 @@ jobs:
             --add-label "待修复" || true
 
           URL_CONTENT=$(cat "${{ steps.process.outputs.url_file }}")
+          ANALYSIS_CONTENT=$(cat analysis_result.md 2>/dev/null || echo "_无分析数据_")
           gh issue comment ${{ github.event.issue.number }} \
             --repo ${{ github.repository }} \
             --body "✅ **数据处理完成！** 共 ${{ steps.process.outputs.count }} 个文件。
@@ -190,6 +198,12 @@ jobs:
           \`\`\`
           ${URL_CONTENT}
           \`\`\`
+
+          ---
+
+          ## 📊 数据分析摘要
+
+          ${ANALYSIS_CONTENT}
 
           ---
 

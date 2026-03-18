@@ -134,8 +134,8 @@ def convert_line(line: str) -> str | None:
     return json.dumps(si, ensure_ascii=False)
 
 
-def process_txt(txt_path: str) -> tuple[str, str, int]:
-    """处理单个 ox txt 文件，返回 (date_dir_name, url_file_path, file_count)。"""
+def process_txt(txt_path: str) -> tuple[str, str, int, str]:
+    """处理单个 ox txt 文件，返回 (date_dir_name, url_file_path, file_count, analysis_md)。"""
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
     # 在 oxdate/ 下创建日期+时间子目录
@@ -186,11 +186,20 @@ def process_txt(txt_path: str) -> tuple[str, str, int]:
     print(f"数据目录: oxdate/{date_dir_name}/")
     print(f"URL 文件: oxdate/{date_dir_name}/url.txt")
 
-    return date_dir_name, url_file, len(txt_filenames)
+    # 数据分析
+    from analyze_data import analyze
+    github_path = f"oxdate/{date_dir_name}"
+    analysis_md = analyze("ox", output_dir, github_path)
+
+    analysis_file = os.path.join(output_dir, "analysis.md")
+    with open(analysis_file, "w", encoding="utf-8") as f:
+        f.write(analysis_md)
+
+    return date_dir_name, url_file, len(txt_filenames), analysis_md
 
 
-def process_zip(zip_path: str) -> tuple[str, str, int]:
-    """处理 ox zip 文件，返回 (date_dir_name, url_file_path, file_count)。"""
+def process_zip(zip_path: str) -> tuple[str, str, int, str]:
+    """处理 ox zip 文件，返回 (date_dir_name, url_file_path, file_count, analysis_md)。"""
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
     now = datetime.now()
@@ -246,10 +255,19 @@ def process_zip(zip_path: str) -> tuple[str, str, int]:
     print(f"数据目录: oxdate/{date_dir_name}/")
     print(f"URL 文件: oxdate/{date_dir_name}/url.txt")
 
-    return date_dir_name, url_file, len(txt_filenames)
+    # 数据分析
+    from analyze_data import analyze
+    github_path = f"oxdate/{date_dir_name}"
+    analysis_md = analyze("ox", output_dir, github_path)
+
+    analysis_file = os.path.join(output_dir, "analysis.md")
+    with open(analysis_file, "w", encoding="utf-8") as f:
+        f.write(analysis_md)
+
+    return date_dir_name, url_file, len(txt_filenames), analysis_md
 
 
-def process_file(file_path: str) -> tuple[str, str, int]:
+def process_file(file_path: str) -> tuple[str, str, int, str]:
     """自动判断文件类型并处理。"""
     if file_path.lower().endswith(".zip"):
         return process_zip(file_path)
