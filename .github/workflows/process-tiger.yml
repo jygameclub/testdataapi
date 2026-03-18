@@ -38,14 +38,48 @@ jobs:
           echo "ext=$EXT" >> "$GITHUB_OUTPUT"
           echo "Found file URL: $FILE_URL (type: $EXT)"
 
-      - name: Post skip comment
+      - name: Post skip comment with format guide
         if: steps.extract.outputs.found == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh issue comment ${{ github.event.issue.number }} \
             --repo ${{ github.repository }} \
-            --body "未在 Issue 正文中找到 .txt 或 .zip 附件链接，跳过处理。"
+            --body "⚠️ **未在 Issue 正文中找到 .txt 或 .zip 附件链接，跳过处理。**
+
+          ### 📋 提交说明
+
+          请在 Issue 正文中直接拖拽上传 \`.txt\` 或 \`.zip\` 文件（GitHub 会自动生成附件链接）。
+
+          ### 📄 支持的数据格式
+
+          **格式一：单行 JSONL（每行一个 JSON 对象）**
+          \`\`\`
+          {\"code\":200,\"data\":{\"rl\":[3,5,7,6,7,5,6,3,5],\"sid\":\"2033428552149368320\",\"ml\":2,\"cs\":0.3,...}}
+          \`\`\`
+
+          **格式二：多行格式化 JSON（会自动转换为单行再处理）**
+          \`\`\`json
+          {
+              \"code\": 200,
+              \"data\": {
+                  \"rl\": [3, 5, 7, 6, 7, 5, 6, 3, 5],
+                  \"sid\": \"2033428552149368320\",
+                  \"ml\": 2,
+                  \"cs\": 0.3,
+                  ...
+              }
+          }
+          \`\`\`
+
+          **格式三：ZIP 压缩包（内含多个 .txt 文件，每个 txt 为上述格式之一）**
+
+          ### ⚠️ 注意事项
+          - 文件必须是 \`.txt\` 或 \`.zip\` 格式
+          - JSON 必须包含 \`data\` 或 \`dt.si\` 字段
+          - 必需字段: \`rl\`, \`sid\`, \`ml\`, \`cs\`, \`tbb\`, \`blb\`, \`blab\`, \`bl\`, \`aw\`, \`wp\`
+          - Tiger 的 rl 数组应为 9 个元素（3x3 网格）
+          - 请勿上传其他格式（如 .json, .csv 等），系统无法处理"
 
       - name: Download file
         if: steps.extract.outputs.found == 'true'
@@ -58,20 +92,78 @@ jobs:
         id: process
         run: |
           python -c "
-          from process_tiger_txt import process_file
-          date_dir, url_file, count = process_file('tiger_upload.${{ steps.extract.outputs.ext }}')
-          print(f'date_dir={date_dir}')
-          print(f'url_file={url_file}')
-          print(f'count={count}')
-          import os
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write(f'date_dir={date_dir}\n')
-              f.write(f'url_file={url_file}\n')
-              f.write(f'count={count}\n')
+          import sys, os
+          try:
+              from process_tiger_txt import process_file
+              date_dir, url_file, count = process_file('tiger_upload.${{ steps.extract.outputs.ext }}')
+              if count == 0:
+                  print('::error::处理完成但未生成任何有效记录')
+                  with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                      f.write('success=false\n')
+                      f.write('error=文件内容无法解析为有效的 tiger 数据，请检查数据格式是否正确\n')
+                  sys.exit(0)
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write(f'date_dir={date_dir}\n')
+                  f.write(f'url_file={url_file}\n')
+                  f.write(f'count={count}\n')
+                  f.write('success=true\n')
+          except Exception as e:
+              print(f'::error::处理失败: {e}')
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write('success=false\n')
+                  f.write(f'error=处理出错: {e}\n')
           "
 
+      - name: Post error comment with format guide
+        if: steps.extract.outputs.found == 'true' && steps.process.outputs.success == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --body "❌ **数据处理失败**
+
+          **错误信息:** ${{ steps.process.outputs.error }}
+
+          ---
+
+          ### 📄 Tiger 标准数据格式说明
+
+          **格式一：单行 JSONL（推荐，每行一个 JSON 对象）**
+          \`\`\`
+          {\"code\":200,\"data\":{\"rl\":[3,5,7,6,7,5,6,3,5],\"sid\":\"2033428552149368320\",\"ml\":2,\"cs\":0.3,\"tbb\":3.0,\"blb\":100000.0,\"blab\":99997.0,\"bl\":99997.0,\"aw\":0.0,\"wp\":null,\"tb\":3.0,\"tw\":0.0,\"np\":-3.0,...}}
+          \`\`\`
+
+          **格式二：多行格式化 JSON（自动转换为单行处理）**
+          \`\`\`json
+          {
+              \"code\": 200,
+              \"data\": {
+                  \"rl\": [3, 5, 7, 6, 7, 5, 6, 3, 5],
+                  \"sid\": \"2033428552149368320\",
+                  \"ml\": 2,
+                  \"cs\": 0.3,
+                  \"tbb\": 3.0,
+                  \"blb\": 100000.0,
+                  \"blab\": 99997.0,
+                  \"bl\": 99997.0,
+                  \"aw\": 0.0,
+                  \"wp\": null
+              }
+          }
+          \`\`\`
+
+          **格式三：ZIP 压缩包（内含多个 .txt 文件）**
+
+          ### ⚠️ 常见问题
+          - JSON 必须包含 \`data\` 或 \`dt.si\` 外层包装
+          - 必需字段: \`rl\`, \`sid\`, \`ml\`, \`cs\`, \`tbb\`, \`blb\`, \`blab\`, \`bl\`, \`aw\`, \`wp\`
+          - Tiger 的 rl 数组应为 9 个元素（3x3 网格）
+          - 仅支持 \`.txt\` 和 \`.zip\` 格式（\`.json\`, \`.csv\` 等无法处理）
+          - 请确保 JSON 格式正确，无多余逗号或缺失括号"
+
       - name: Commit and push
-        if: steps.extract.outputs.found == 'true'
+        if: steps.extract.outputs.found == 'true' && steps.process.outputs.success == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -80,7 +172,7 @@ jobs:
           git push
 
       - name: Comment url.txt on issue
-        if: steps.extract.outputs.found == 'true'
+        if: steps.extract.outputs.found == 'true' && steps.process.outputs.success == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -94,7 +186,7 @@ jobs:
           \`\`\`"
 
       - name: Close issue
-        if: steps.extract.outputs.found == 'true'
+        if: steps.extract.outputs.found == 'true' && steps.process.outputs.success == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

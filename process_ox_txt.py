@@ -3,7 +3,7 @@
 创建日期+时间目录，转换数据并生成 url 文件。
 
 支持两种输入:
-  1. 单个 .txt 文件路径
+  1. 单个 .txt 文件路径（支持单行JSONL和多行格式化JSON）
   2. .zip 文件路径（内含多个 .txt）
 
 用法: python process_ox_txt.py
@@ -28,6 +28,63 @@ FLOAT_FIELDS = {
     "ssaw", "crtw", "twbm", "cs", "ctw", "aw",
     "blb", "blab", "bl", "tb", "tbb", "tw", "np",
 }
+
+
+def multiline_to_jsonl(content: str) -> list[str]:
+    """将多行格式化JSON转换为单行JSONL列表。
+
+    支持:
+      - 已经是单行JSONL格式（每行一个JSON对象）
+      - 单个或多个格式化（多行缩进）的JSON对象
+    """
+    content = content.strip()
+    if not content:
+        return []
+
+    # 快速判断：如果第一个非空行本身就是完整JSON，按JSONL处理
+    first_line = content.split("\n", 1)[0].strip()
+    if first_line.startswith("{"):
+        try:
+            json.loads(first_line)
+            # 第一行就是完整JSON，按原有JSONL逻辑处理
+            return [line for line in content.split("\n") if line.strip()]
+        except json.JSONDecodeError:
+            pass
+
+    # 多行JSON：用大括号计数法拆分出每个完整的JSON对象
+    lines = []
+    depth = 0
+    current = []
+    for line in content.split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        depth += stripped.count("{") - stripped.count("}")
+        current.append(stripped)
+        if depth == 0 and current:
+            merged = " ".join(current)
+            try:
+                obj = json.loads(merged)
+                lines.append(json.dumps(obj, separators=(",", ":"), ensure_ascii=False))
+            except json.JSONDecodeError:
+                pass
+            current = []
+
+    # 处理可能的不完整尾部
+    if current:
+        merged = " ".join(current)
+        # 尝试补全缺失的 }
+        open_b = merged.count("{")
+        close_b = merged.count("}")
+        if open_b > close_b:
+            merged += "}" * (open_b - close_b)
+        try:
+            obj = json.loads(merged)
+            lines.append(json.dumps(obj, separators=(",", ":"), ensure_ascii=False))
+        except json.JSONDecodeError:
+            pass
+
+    return lines
 
 
 def convert_line(line: str) -> str | None:
@@ -89,12 +146,13 @@ def process_txt(txt_path: str) -> tuple[str, str, int]:
     os.makedirs(output_dir, exist_ok=True)
     print(f"创建目录: oxdate/{date_dir_name}/")
 
-    # 读取并转换
+    # 读取并转换（支持多行格式化JSON和单行JSONL）
     with open(txt_path, "r", encoding="utf-8") as f:
-        lines = f.readlines()
+        content = f.read()
 
+    json_lines = multiline_to_jsonl(content)
     results = []
-    for line in lines:
+    for line in json_lines:
         result = convert_line(line)
         if result:
             results.append(result)
@@ -150,10 +208,10 @@ def process_zip(zip_path: str) -> tuple[str, str, int]:
 
             basename = os.path.basename(info.filename)
             data = zf.read(info.filename).decode("utf-8")
-            lines = data.strip().split("\n")
 
+            json_lines = multiline_to_jsonl(data)
             results = []
-            for line in lines:
+            for line in json_lines:
                 result = convert_line(line)
                 if result:
                     results.append(result)
