@@ -35,14 +35,32 @@ jobs:
           echo "found=true" >> "$GITHUB_OUTPUT"
           echo "Found zip URL: $ZIP_URL"
 
-      - name: Post skip comment
+      - name: Post skip comment with format guide
         if: steps.extract.outputs.found == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh issue comment ${{ github.event.issue.number }} \
             --repo ${{ github.repository }} \
-            --body "未在 Issue 正文中找到 .zip 附件链接，跳过处理。"
+            --body "⚠️ **未在 Issue 正文中找到 .zip 附件链接，跳过处理。**
+
+          ### 📋 提交说明
+
+          请在 Issue 正文中直接拖拽上传 \`.zip\` 文件（GitHub 会自动生成附件链接）。
+
+          ### 📄 支持的数据格式
+
+          **ZIP 压缩包（内含多个 .txt 文件，每个 txt 为单行 JSONL 格式）**
+
+          Anubis 仅支持 \`.zip\` 格式，zip 内每个 txt 文件每行一个 JSON 对象：
+          \`\`\`
+          {\"dt\":{\"si\":{\"rl\":[...],\"sid\":\"...\",\"ml\":1,\"cs\":2.0,...}},\"err\":null}
+          \`\`\`
+
+          ### ⚠️ 注意事项
+          - 文件必须是 \`.zip\` 格式（不支持单独 .txt）
+          - JSON 必须包含 \`dt.si\` 字段
+          - 必需字段: \`rl\`, \`sid\`, \`ml\`, \`cs\`, \`tbb\`, \`blb\`, \`blab\`, \`bl\`, \`aw\`, \`wp\`"
 
       - name: Download zip
         if: steps.extract.outputs.found == 'true'
@@ -55,21 +73,57 @@ jobs:
         id: process
         run: |
           python -c "
-          from process_anubis_zip import process_zip
-          date_dir, url_file, count = process_zip('anubis_upload.zip')
-          print(f'date_dir={date_dir}')
-          print(f'url_file={url_file}')
-          print(f'count={count}')
-          # Write outputs
-          import os
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write(f'date_dir={date_dir}\n')
-              f.write(f'url_file={url_file}\n')
-              f.write(f'count={count}\n')
+          import sys, os
+          try:
+              from process_anubis_zip import process_zip
+              date_dir, url_file, count = process_zip('anubis_upload.zip')
+              if count == 0:
+                  print('::error::处理完成但未生成任何有效记录')
+                  with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                      f.write('success=false\n')
+                      f.write('error=文件内容无法解析为有效的 anubis 数据，请检查数据格式是否正确\n')
+                  sys.exit(0)
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write(f'date_dir={date_dir}\n')
+                  f.write(f'url_file={url_file}\n')
+                  f.write(f'count={count}\n')
+                  f.write('success=true\n')
+          except Exception as e:
+              print(f'::error::处理失败: {e}')
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write('success=false\n')
+                  f.write(f'error=处理出错: {e}\n')
           "
 
+      - name: Post error comment with format guide
+        if: steps.extract.outputs.found == 'true' && steps.process.outputs.success == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --body "❌ **数据处理失败**
+
+          **错误信息:** ${{ steps.process.outputs.error }}
+
+          ---
+
+          ### 📄 Anubis 标准数据格式说明
+
+          **ZIP 压缩包（内含多个 .txt 文件）**
+
+          每个 txt 文件每行一个 JSON 对象：
+          \`\`\`
+          {\"dt\":{\"si\":{\"rl\":[...],\"sid\":\"...\",\"ml\":1,\"cs\":2.0,\"tbb\":20.0,\"blb\":4329.0,\"blab\":4309.0,\"bl\":4327.0,\"aw\":18.0,\"wp\":{...}}},\"err\":null}
+          \`\`\`
+
+          ### ⚠️ 常见问题
+          - Anubis 仅支持 \`.zip\` 格式（不支持单独 .txt）
+          - JSON 必须包含 \`dt.si\` 外层包装
+          - 必需字段: \`rl\`, \`sid\`, \`ml\`, \`cs\`, \`tbb\`, \`blb\`, \`blab\`, \`bl\`, \`aw\`, \`wp\`"
+
       - name: Commit and push
-        if: steps.extract.outputs.found == 'true'
+        if: steps.extract.outputs.found == 'true' && steps.process.outputs.success == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -77,24 +131,32 @@ jobs:
           git commit -m "Add anubis data ${{ steps.process.outputs.date_dir }}"
           git push
 
-      - name: Comment url.txt on issue
-        if: steps.extract.outputs.found == 'true'
+      - name: Add label and comment with workflow guide
+        if: steps.extract.outputs.found == 'true' && steps.process.outputs.success == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # 添加待修复标签
+          gh issue edit ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --add-label "待修复"
+
           URL_CONTENT=$(cat "${{ steps.process.outputs.url_file }}")
           gh issue comment ${{ github.event.issue.number }} \
             --repo ${{ github.repository }} \
-            --body "处理完成！共 ${{ steps.process.outputs.count }} 个文件。
+            --body "✅ **数据处理完成！** 共 ${{ steps.process.outputs.count }} 个文件。
 
           \`\`\`
           ${URL_CONTENT}
-          \`\`\`"
+          \`\`\`
 
-      - name: Close issue
-        if: steps.extract.outputs.found == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh issue close ${{ github.event.issue.number }} \
-            --repo ${{ github.repository }}
+          ---
+
+          ### 📌 后续流程
+
+          | 步骤 | 操作人 | 回复内容 | 说明 |
+          |------|--------|----------|------|
+          | 1️⃣ | 开发 | \`程序已修复\` | 程序修复后回复，状态变为【待验证】 |
+          | 2️⃣ | 测试 | \`测试已经验证\` | 验证通过后回复，Issue 自动关闭 |
+
+          > 💡 请直接在本 Issue 下方回复对应关键词即可触发状态流转。"

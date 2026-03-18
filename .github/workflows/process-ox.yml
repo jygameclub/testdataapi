@@ -170,24 +170,32 @@ jobs:
           git commit -m "Add ox data ${{ steps.process.outputs.date_dir }}"
           git push
 
-      - name: Comment url.txt on issue
+      - name: Add label and comment with workflow guide
         if: steps.extract.outputs.found == 'true' && steps.process.outputs.success == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # 添加待修复标签
+          gh issue edit ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --add-label "待修复"
+
           URL_CONTENT=$(cat "${{ steps.process.outputs.url_file }}")
           gh issue comment ${{ github.event.issue.number }} \
             --repo ${{ github.repository }} \
-            --body "处理完成！共 ${{ steps.process.outputs.count }} 个文件。
+            --body "✅ **数据处理完成！** 共 ${{ steps.process.outputs.count }} 个文件。
 
           \`\`\`
           ${URL_CONTENT}
-          \`\`\`"
+          \`\`\`
 
-      - name: Close issue
-        if: steps.extract.outputs.found == 'true' && steps.process.outputs.success == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh issue close ${{ github.event.issue.number }} \
-            --repo ${{ github.repository }}
+          ---
+
+          ### 📌 后续流程
+
+          | 步骤 | 操作人 | 回复内容 | 说明 |
+          |------|--------|----------|------|
+          | 1️⃣ | 开发 | \`程序已修复\` | 程序修复后回复，状态变为【待验证】 |
+          | 2️⃣ | 测试 | \`测试已经验证\` | 验证通过后回复，Issue 自动关闭 |
+
+          > 💡 请直接在本 Issue 下方回复对应关键词即可触发状态流转。"

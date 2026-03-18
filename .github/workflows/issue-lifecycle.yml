@@ -1,0 +1,93 @@
+name: Issue Lifecycle
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+
+jobs:
+  dev-fixed:
+    # 开发回复"程序已修复" → 状态变为待验证
+    if: |
+      !github.event.issue.pull_request &&
+      contains(github.event.comment.body, '程序已修复')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update label to 待验证
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 移除旧标签，添加新标签
+          gh issue edit ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --remove-label "待修复" \
+            --add-label "待验证" || true
+
+          gh issue comment ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --body "🔧 **状态更新：待验证**
+
+          开发已回复程序已修复，等待测试验证。
+
+          ---
+
+          ### 📌 下一步
+
+          | 步骤 | 操作人 | 回复内容 | 说明 |
+          |------|--------|----------|------|
+          | ➡️ | 测试 | \`测试已经验证\` | 验证通过后回复，Issue 自动关闭 |
+          | ➡️ | 测试 | \`验证不通过\` | 验证失败，状态回到【待修复】 |
+
+          > 💡 请测试同学验证后在本 Issue 下方回复对应关键词。"
+
+  test-verified:
+    # 测试回复"测试已经验证" → 关闭 issue
+    if: |
+      !github.event.issue.pull_request &&
+      contains(github.event.comment.body, '测试已经验证')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close issue as verified
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 更新标签
+          gh issue edit ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --remove-label "待验证" \
+            --add-label "已验证" || true
+
+          gh issue comment ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --body "✅ **测试验证通过，Issue 已关闭。**
+
+          感谢测试与开发的协作！"
+
+          gh issue close ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --reason completed
+
+  test-failed:
+    # 测试回复"验证不通过" → 状态回到待修复
+    if: |
+      !github.event.issue.pull_request &&
+      contains(github.event.comment.body, '验证不通过')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Revert label to 待修复
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 移除待验证，恢复待修复
+          gh issue edit ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --remove-label "待验证" \
+            --add-label "待修复" || true
+
+          gh issue comment ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --body "❌ **验证不通过，状态已回退为【待修复】。**
+
+          请开发同学检查并修复后再次回复 \`程序已修复\`。"
