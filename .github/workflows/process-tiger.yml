@@ -176,10 +176,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # 添加待修复标签
+          # 添加待修复标签（不存在则自动创建）
+          gh label create "待修复" --color "d73a4a" --description "等待开发修复" --repo ${{ github.repository }} 2>/dev/null || true
           gh issue edit ${{ github.event.issue.number }} \
             --repo ${{ github.repository }} \
-            --add-label "待修复"
+            --add-label "待修复" || true
 
           URL_CONTENT=$(cat "${{ steps.process.outputs.url_file }}")
           gh issue comment ${{ github.event.issue.number }} \

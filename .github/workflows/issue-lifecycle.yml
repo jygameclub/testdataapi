@@ -19,10 +19,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # 创建标签（不存在则创建，已存在则跳过）
+          gh label create "待验证" --color "0e8a16" --description "等待测试验证" --repo ${{ github.repository }} 2>/dev/null || true
           # 移除旧标签，添加新标签
           gh issue edit ${{ github.event.issue.number }} \
             --repo ${{ github.repository }} \
-            --remove-label "待修复" \
+            --remove-label "待修复" || true
+          gh issue edit ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
             --add-label "待验证" || true
 
           gh issue comment ${{ github.event.issue.number }} \
@@ -53,10 +57,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # 创建标签（不存在则创建，已存在则跳过）
+          gh label create "已验证" --color "5319e7" --description "测试验证通过" --repo ${{ github.repository }} 2>/dev/null || true
           # 更新标签
           gh issue edit ${{ github.event.issue.number }} \
             --repo ${{ github.repository }} \
-            --remove-label "待验证" \
+            --remove-label "待验证" || true
+          gh issue edit ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
             --add-label "已验证" || true
 
           gh issue comment ${{ github.event.issue.number }} \
@@ -83,7 +91,9 @@ jobs:
           # 移除待验证，恢复待修复
           gh issue edit ${{ github.event.issue.number }} \
             --repo ${{ github.repository }} \
-            --remove-label "待验证" \
+            --remove-label "待验证" || true
+          gh issue edit ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
             --add-label "待修复" || true
 
           gh issue comment ${{ github.event.issue.number }} \
