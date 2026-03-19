@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Extract attachment URL from issue body
+      - name: Extract attachment URL and token from issue body
         id: extract
         env:
           ISSUE_BODY: ${{ github.event.issue.body }}
@@ -37,6 +37,16 @@ jobs:
           EXT="${FILE_URL##*.}"
           echo "ext=$EXT" >> "$GITHUB_OUTPUT"
           echo "Found file URL: $FILE_URL (type: $EXT)"
+
+          # 提取自定义 token（格式: token: xxx）
+          CUSTOM_TOKEN=$(echo "$ISSUE_BODY" | grep -oP '(?i)token:\s*\K\S+' | head -1)
+          if [ -n "$CUSTOM_TOKEN" ]; then
+            echo "token=$CUSTOM_TOKEN" >> "$GITHUB_OUTPUT"
+            echo "Found custom token: ${CUSTOM_TOKEN:0:8}..."
+          else
+            echo "token=" >> "$GITHUB_OUTPUT"
+            echo "No custom token found, will use default"
+          fi
 
       - name: Post skip comment with format guide
         if: steps.extract.outputs.found == 'false'
@@ -90,12 +100,15 @@ jobs:
       - name: Process file
         if: steps.extract.outputs.found == 'true'
         id: process
+        env:
+          CUSTOM_TOKEN: ${{ steps.extract.outputs.token }}
         run: |
           python -c "
           import sys, os
           try:
               from process_tiger_txt import process_file
-              date_dir, url_file, count, analysis_md = process_file('tiger_upload.${{ steps.extract.outputs.ext }}')
+              token = os.environ.get('CUSTOM_TOKEN') or None
+              date_dir, url_file, count, analysis_md = process_file('tiger_upload.${{ steps.extract.outputs.ext }}', token=token)
               if count == 0:
                   print('::error::处理完成但未生成任何有效记录')
                   with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
@@ -191,6 +204,16 @@ jobs:
 
           URL_CONTENT=$(cat "${{ steps.process.outputs.url_file }}")
           ANALYSIS_CONTENT=$(cat analysis_result.md 2>/dev/null || echo "_无分析数据_")
+
+          # 确定当前使用的 token
+          USED_TOKEN="${{ steps.extract.outputs.token }}"
+          if [ -z "$USED_TOKEN" ]; then
+            USED_TOKEN="b3bb96ff1faef019504b83495ec3e45a"
+            TOKEN_SOURCE="默认"
+          else
+            TOKEN_SOURCE="自定义"
+          fi
+
           gh issue comment ${{ github.event.issue.number }} \
             --repo ${{ github.repository }} \
             --body "✅ **数据处理完成！** 共 ${{ steps.process.outputs.count }} 个文件。
@@ -204,6 +227,16 @@ jobs:
           ## 📊 数据分析摘要
 
           ${ANALYSIS_CONTENT}
+
+          ---
+
+          ### 🔑 Token 信息
+
+          当前使用的 token（${TOKEN_SOURCE}）: \`${USED_TOKEN}\`
+
+          如需更换 token，可以：
+          - **方式一**：将链接中的 \`token=${USED_TOKEN}\` 替换为你的 token
+          - **方式二**：新建 Issue，在正文中添加 \`token: 你的新token\` 重新生成
 
           ---
 

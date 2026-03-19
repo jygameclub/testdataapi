@@ -9,34 +9,21 @@ import json
 import os
 import urllib.parse
 
-# 各游戏调试链接基础 URL
-GAME_URL_BASES = {
-    "tiger": (
-        "https://fish-games.s3.amazonaws.com/tiger/index.html"
-        "?env=ceshislot.osshaiwai.com&hasFloat=0"
-        "&token=b3bb96ff1faef019504b83495ec3e45a"
-        "&language=en&debug=1"
-    ),
-    "ox": (
-        "https://fish-games.s3.amazonaws.com/Fortune-Ox/index.html"
-        "?env=ceshislot.osshaiwai.com&hasFloat=0"
-        "&token=b3bb96ff1faef019504b83495ec3e45a"
-        "&language=en&debug=1"
-    ),
-    "anubis": (
-        "https://fish-games.s3.amazonaws.com/Anubis/index.html"
-        "?env=ceshislot.osshaiwai.com&hasFloat=0"
-        "&token=b3bb96ff1faef019504b83495ec3e45a"
-        "&language=en&debug=1"
-    ),
+# 各游戏调试链接基础 URL（不含 token）
+DEFAULT_TOKEN = "b3bb96ff1faef019504b83495ec3e45a"
+GAME_URL_TEMPLATES = {
+    "tiger": "https://fish-games.s3.amazonaws.com/tiger/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token={token}&language=en&debug=1",
+    "ox": "https://fish-games.s3.amazonaws.com/Fortune-Ox/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token={token}&language=en&debug=1",
+    "anubis": "https://fish-games.s3.amazonaws.com/Anubis/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token={token}&language=en&debug=1",
 }
 
 GITHUB_RAW_BASE = "https://raw.githubusercontent.com/jygameclub/testdataapi/main"
 
 
-def _build_debug_link(game: str, data_url: str, start: int) -> str:
+def _build_debug_link(game: str, data_url: str, start: int, token: str | None = None) -> str:
     """构建带 debugStart 的调试链接。"""
-    base = GAME_URL_BASES[game]
+    t = token or DEFAULT_TOKEN
+    base = GAME_URL_TEMPLATES[game].format(token=t)
     return f"{base}&debugDataUrl={data_url}&debugStart={start}"
 
 
@@ -89,7 +76,7 @@ def _describe_win(record: dict, game: str) -> str:
     return " ".join(parts) if parts else f"{lines}线中奖"
 
 
-def analyze_tiger(data_dir: str, github_path: str) -> str:
+def analyze_tiger(data_dir: str, github_path: str, token: str | None = None) -> str:
     """分析 Tiger 数据，返回 markdown 摘要。"""
     game = "tiger"
     free_spins = []   # (文件名, 起始编号, 轮次, 总赢, 说明)
@@ -147,10 +134,10 @@ def analyze_tiger(data_dir: str, github_path: str) -> str:
 
             i += 1
 
-    return _format_tiger_markdown(free_spins, angry_list, big_wins)
+    return _format_tiger_markdown(free_spins, angry_list, big_wins, token=token)
 
 
-def _format_tiger_markdown(free_spins, angry_list, big_wins) -> str:
+def _format_tiger_markdown(free_spins, angry_list, big_wins, token: str | None = None) -> str:
     """格式化 Tiger 分析结果为 markdown。"""
     sections = []
 
@@ -159,7 +146,7 @@ def _format_tiger_markdown(free_spins, angry_list, big_wins) -> str:
         lines.append("| 数据组 | 起始编号 | 轮次 | 总赢 | 测试要点 | 调试链接 |")
         lines.append("|--------|---------|------|------|---------|---------|")
         for fname, num, rounds, win, desc, data_url in free_spins:
-            link = _build_debug_link("tiger", data_url, num)
+            link = _build_debug_link("tiger", data_url, num, token=token)
             lines.append(f"| {fname} | #{num:03d} | {rounds} | {win:.0f} | {desc} | [点击测试]({link}) |")
         sections.append("\n".join(lines))
 
@@ -168,7 +155,7 @@ def _format_tiger_markdown(free_spins, angry_list, big_wins) -> str:
         lines.append("| 数据组 | 编号 | 说明 | 调试链接 |")
         lines.append("|--------|------|------|---------|")
         for fname, num, desc, data_url in angry_list:
-            link = _build_debug_link("tiger", data_url, num)
+            link = _build_debug_link("tiger", data_url, num, token=token)
             lines.append(f"| {fname} | #{num:03d} | {desc} | [点击测试]({link}) |")
         sections.append("\n".join(lines))
 
@@ -177,7 +164,7 @@ def _format_tiger_markdown(free_spins, angry_list, big_wins) -> str:
         lines.append("| 数据组 | 编号 | 金额 | 说明 | 调试链接 |")
         lines.append("|--------|------|------|------|---------|")
         for fname, num, amount, desc, data_url in big_wins:
-            link = _build_debug_link("tiger", data_url, num)
+            link = _build_debug_link("tiger", data_url, num, token=token)
             lines.append(f"| {fname} | #{num:03d} | {amount:.0f} | {desc} | [点击测试]({link}) |")
         sections.append("\n".join(lines))
 
@@ -187,7 +174,7 @@ def _format_tiger_markdown(free_spins, angry_list, big_wins) -> str:
     return "\n\n".join(sections)
 
 
-def analyze_ox(data_dir: str, github_path: str) -> str:
+def analyze_ox(data_dir: str, github_path: str, token: str | None = None) -> str:
     """分析 Ox 数据，返回 markdown 摘要。"""
     game = "ox"
     free_spins = []
@@ -244,10 +231,10 @@ def analyze_ox(data_dir: str, github_path: str) -> str:
 
             i += 1
 
-    return _format_ox_markdown(free_spins, big_wins, multiplier_list)
+    return _format_ox_markdown(free_spins, big_wins, multiplier_list, token=token)
 
 
-def _format_ox_markdown(free_spins, big_wins, multiplier_list) -> str:
+def _format_ox_markdown(free_spins, big_wins, multiplier_list, token: str | None = None) -> str:
     """格式化 Ox 分析结果为 markdown。"""
     sections = []
 
@@ -256,7 +243,7 @@ def _format_ox_markdown(free_spins, big_wins, multiplier_list) -> str:
         lines.append("| 数据组 | 起始编号 | 轮次 | 总赢 | 测试要点 | 调试链接 |")
         lines.append("|--------|---------|------|------|---------|---------|")
         for fname, num, rounds, win, desc, data_url in free_spins:
-            link = _build_debug_link("ox", data_url, num)
+            link = _build_debug_link("ox", data_url, num, token=token)
             lines.append(f"| {fname} | #{num:03d} | {rounds} | {win:.0f} | {desc} | [点击测试]({link}) |")
         sections.append("\n".join(lines))
 
@@ -265,7 +252,7 @@ def _format_ox_markdown(free_spins, big_wins, multiplier_list) -> str:
         lines.append("| 数据组 | 编号 | 金额 | 说明 | 调试链接 |")
         lines.append("|--------|------|------|------|---------|")
         for fname, num, amount, desc, data_url in multiplier_list:
-            link = _build_debug_link("ox", data_url, num)
+            link = _build_debug_link("ox", data_url, num, token=token)
             lines.append(f"| {fname} | #{num:03d} | {amount:.0f} | {desc} | [点击测试]({link}) |")
         sections.append("\n".join(lines))
 
@@ -274,7 +261,7 @@ def _format_ox_markdown(free_spins, big_wins, multiplier_list) -> str:
         lines.append("| 数据组 | 编号 | 金额 | 说明 | 调试链接 |")
         lines.append("|--------|------|------|------|---------|")
         for fname, num, amount, desc, data_url in big_wins:
-            link = _build_debug_link("ox", data_url, num)
+            link = _build_debug_link("ox", data_url, num, token=token)
             lines.append(f"| {fname} | #{num:03d} | {amount:.0f} | {desc} | [点击测试]({link}) |")
         sections.append("\n".join(lines))
 
@@ -284,7 +271,7 @@ def _format_ox_markdown(free_spins, big_wins, multiplier_list) -> str:
     return "\n\n".join(sections)
 
 
-def analyze_anubis(data_dir: str, github_path: str) -> str:
+def analyze_anubis(data_dir: str, github_path: str, token: str | None = None) -> str:
     """分析 Anubis 数据，返回 markdown 摘要。"""
     game = "anubis"
     free_spins = []
@@ -342,10 +329,10 @@ def analyze_anubis(data_dir: str, github_path: str) -> str:
 
             i += 1
 
-    return _format_anubis_markdown(free_spins, scatter_list, big_wins)
+    return _format_anubis_markdown(free_spins, scatter_list, big_wins, token=token)
 
 
-def _format_anubis_markdown(free_spins, scatter_list, big_wins) -> str:
+def _format_anubis_markdown(free_spins, scatter_list, big_wins, token: str | None = None) -> str:
     """格式化 Anubis 分析结果为 markdown。"""
     sections = []
 
@@ -354,7 +341,7 @@ def _format_anubis_markdown(free_spins, scatter_list, big_wins) -> str:
         lines.append("| 数据组 | 起始编号 | 轮次 | 总赢 | 测试要点 | 调试链接 |")
         lines.append("|--------|---------|------|------|---------|---------|")
         for fname, num, rounds, win, desc, data_url in free_spins:
-            link = _build_debug_link("anubis", data_url, num)
+            link = _build_debug_link("anubis", data_url, num, token=token)
             lines.append(f"| {fname} | #{num:03d} | {rounds} | {win:.0f} | {desc} | [点击测试]({link}) |")
         sections.append("\n".join(lines))
 
@@ -363,7 +350,7 @@ def _format_anubis_markdown(free_spins, scatter_list, big_wins) -> str:
         lines.append("| 数据组 | 编号 | 说明 | 调试链接 |")
         lines.append("|--------|------|------|---------|")
         for fname, num, desc, data_url in scatter_list:
-            link = _build_debug_link("anubis", data_url, num)
+            link = _build_debug_link("anubis", data_url, num, token=token)
             lines.append(f"| {fname} | #{num:03d} | {desc} | [点击测试]({link}) |")
         sections.append("\n".join(lines))
 
@@ -372,7 +359,7 @@ def _format_anubis_markdown(free_spins, scatter_list, big_wins) -> str:
         lines.append("| 数据组 | 编号 | 金额 | 说明 | 调试链接 |")
         lines.append("|--------|------|------|------|---------|")
         for fname, num, amount, desc, data_url in big_wins:
-            link = _build_debug_link("anubis", data_url, num)
+            link = _build_debug_link("anubis", data_url, num, token=token)
             lines.append(f"| {fname} | #{num:03d} | {amount:.0f} | {desc} | [点击测试]({link}) |")
         sections.append("\n".join(lines))
 
@@ -382,23 +369,24 @@ def _format_anubis_markdown(free_spins, scatter_list, big_wins) -> str:
     return "\n\n".join(sections)
 
 
-def analyze(game: str, data_dir: str, github_path: str) -> str:
+def analyze(game: str, data_dir: str, github_path: str, token: str | None = None) -> str:
     """统一入口：根据游戏类型分析数据目录，返回 markdown 摘要。
 
     Args:
         game: 游戏类型 (tiger / ox / anubis)
         data_dir: 处理后的数据目录绝对路径
         github_path: GitHub 相对路径 (如 tigerdate/0316_0831)
+        token: 自定义 token，为 None 时使用默认值
 
     Returns:
         markdown 格式的分析摘要
     """
     if game == "tiger":
-        return analyze_tiger(data_dir, github_path)
+        return analyze_tiger(data_dir, github_path, token=token)
     elif game == "ox":
-        return analyze_ox(data_dir, github_path)
+        return analyze_ox(data_dir, github_path, token=token)
     elif game == "anubis":
-        return analyze_anubis(data_dir, github_path)
+        return analyze_anubis(data_dir, github_path, token=token)
     else:
         return f"_不支持的游戏类型: {game}_"
 

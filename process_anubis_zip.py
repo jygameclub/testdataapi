@@ -12,12 +12,14 @@ from datetime import datetime
 
 # GitHub 仓库信息
 GITHUB_RAW_BASE = "https://raw.githubusercontent.com/jygameclub/testdataapi/main"
-GAME_URL_BASE = (
-    "https://fish-games.s3.amazonaws.com/Anubis/index.html"
-    "?env=ceshislot.osshaiwai.com&hasFloat=0"
-    "&token=b3bb96ff1faef019504b83495ec3e45a"
-    "&language=en&debug=1"
-)
+DEFAULT_TOKEN = "b3bb96ff1faef019504b83495ec3e45a"
+
+def _game_url_base(token: str | None = None) -> str:
+    t = token or DEFAULT_TOKEN
+    return (
+        "https://fish-games.s3.amazonaws.com/Anubis/index.html"
+        f"?env=ceshislot.osshaiwai.com&hasFloat=0&token={t}&language=en&debug=1"
+    )
 
 # 需要确保为 float 类型的字段（金额相关）
 FLOAT_FIELDS = {
@@ -63,11 +65,8 @@ def convert_line(line: str) -> str | None:
     return json.dumps(si, ensure_ascii=False)
 
 
-def process_zip(zip_path: str) -> tuple[str, str, int, str]:
-    """处理 anubis zip 文件，返回 (date_dir_name, url_file_path, file_count, analysis_md)。
-
-    可被 slack_bot.py 等外部调用。
-    """
+def process_zip(zip_path: str, token: str | None = None) -> tuple[str, str, int, str]:
+    """处理 anubis zip 文件，返回 (date_dir_name, url_file_path, file_count, analysis_md)。"""
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
     # 在 anubisdate/ 下创建日期+时间子目录
@@ -113,9 +112,10 @@ def process_zip(zip_path: str) -> tuple[str, str, int, str]:
 
     url_lines.append("")  # 空行分隔
 
+    game_base = _game_url_base(token)
     for name in txt_filenames:
         data_url = f"{GITHUB_RAW_BASE}/{github_path}/{name}"
-        url_lines.append(f"{GAME_URL_BASE}&debugDataUrl={data_url}&debugStart=1")
+        url_lines.append(f"{game_base}&debugDataUrl={data_url}&debugStart=1")
 
     url_file = os.path.join(output_dir, "url.txt")
     with open(url_file, "w", encoding="utf-8") as f:
@@ -128,7 +128,7 @@ def process_zip(zip_path: str) -> tuple[str, str, int, str]:
     # 数据分析
     from analyze_data import analyze
     github_path = f"anubisdate/{date_dir_name}"
-    analysis_md = analyze("anubis", output_dir, github_path)
+    analysis_md = analyze("anubis", output_dir, github_path, token=token)
 
     analysis_file = os.path.join(output_dir, "analysis.md")
     with open(analysis_file, "w", encoding="utf-8") as f:
