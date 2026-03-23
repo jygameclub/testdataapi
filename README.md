@@ -260,6 +260,7 @@ python process_tiger_txt.py
 
 | 批次 | 日期 | 数据文件 | 调试链接 |
 |------|------|---------|---------|
+| 0323_0457 | 03-23 04:57 | ox_upload.txt | [ox_upload](https://fish-games.s3.amazonaws.com/Fortune-Ox/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=b3bb96ff1faef019504b83495ec3e45a&language=en&debug=1&debugDataUrl=https://raw.githubusercontent.com/jygameclub/testdataapi/main/oxdate/0323_0457/ox_upload.txt&debugStart=1) |
 | 0323_0452 | 03-23 04:52 | ox_upload.txt | [ox_upload](https://fish-games.s3.amazonaws.com/Fortune-Ox/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=b3bb96ff1faef019504b83495ec3e45a&language=en&debug=1&debugDataUrl=https://raw.githubusercontent.com/jygameclub/testdataapi/main/oxdate/0323_0452/ox_upload.txt&debugStart=1) |
 | 0323_0435 | 03-23 04:35 | ox_upload.txt | [ox_upload](https://fish-games.s3.amazonaws.com/Fortune-Ox/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=b3bb96ff1faef019504b83495ec3e45a&language=en&debug=1&debugDataUrl=https://raw.githubusercontent.com/jygameclub/testdataapi/main/oxdate/0323_0435/ox_upload.txt&debugStart=1) |
 | 0318_0515 | 03-18 05:15 | ox_upload.txt | [ox_upload](https://fish-games.s3.amazonaws.com/Fortune-Ox/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=b3bb96ff1faef019504b83495ec3e45a&language=en&debug=1&debugDataUrl=https://raw.githubusercontent.com/jygameclub/testdataapi/main/oxdate/0318_0515/ox_upload.txt&debugStart=1) |
