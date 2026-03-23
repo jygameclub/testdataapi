@@ -1,0 +1,3 @@
+https://raw.githubusercontent.com/jygameclub/testdataapi/main/oxdate/0323_0631/ox_upload.txt
+
+https://fish-games.s3.amazonaws.com/Fortune-Ox/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=b3bb96ff1faef019504b83495ec3e45a&language=en&debug=1&debugDataUrl=https://raw.githubusercontent.com/jygameclub/testdataapi/main/oxdate/0323_0631/ox_upload.txt&debugStart=1
