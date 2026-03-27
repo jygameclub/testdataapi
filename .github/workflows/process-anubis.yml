@@ -43,10 +43,11 @@ jobs:
             echo "filetype=zip" >> "$GITHUB_OUTPUT"
           fi
 
-          # 提取自定义 token（从 body: "token: xxx" 或从 title: "token换成xxx" / "token:xxx"）
-          CUSTOM_TOKEN=$(echo "$ISSUE_BODY" | grep -oP '(?i)token[:\s]\s*\K\S+' | head -1)
+          # 提取自定义 token（标题和正文都支持: "token:xxx" / "token换成xxx" / "token为xxx" / "token xxx"）
+          TOKEN_REGEX='(?i)token[换成为:\s]+\K[a-zA-Z0-9]+'
+          CUSTOM_TOKEN=$(echo "$ISSUE_TITLE" | grep -oP "$TOKEN_REGEX" | head -1)
           if [ -z "$CUSTOM_TOKEN" ]; then
-            CUSTOM_TOKEN=$(echo "$ISSUE_TITLE" | grep -oP '(?i)token[换成为:\s]+\K[a-zA-Z0-9]+' | head -1)
+            CUSTOM_TOKEN=$(echo "$ISSUE_BODY" | grep -oP "$TOKEN_REGEX" | head -1)
           fi
           if [ -n "$CUSTOM_TOKEN" ]; then
             echo "token=$CUSTOM_TOKEN" >> "$GITHUB_OUTPUT"
