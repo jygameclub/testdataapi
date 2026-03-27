@@ -142,17 +142,15 @@ jobs:
 
           ### 📄 Anubis 标准数据格式说明
 
-          **ZIP 压缩包（内含多个 .txt 文件）**
+          支持 \`.zip\` 压缩包或单个 \`.txt\` 文件，支持 JSONL 和 pretty-printed JSON 格式。
 
-          每个 txt 文件每行一个 JSON 对象：
+          支持的 JSON 结构：
           \`\`\`
-          {\"dt\":{\"si\":{\"rl\":[...],\"sid\":\"...\",\"ml\":1,\"cs\":2.0,\"tbb\":20.0,\"blb\":4329.0,\"blab\":4309.0,\"bl\":4327.0,\"aw\":18.0,\"wp\":{...}}},\"err\":null}
+          {\"dt\":{\"si\":{\"rl\":[...],\"sid\":\"...\",\"ml\":1,\"cs\":2.0,...}},\"err\":null}
           \`\`\`
-
-          ### ⚠️ 常见问题
-          - Anubis 仅支持 \`.zip\` 格式（不支持单独 .txt）
-          - JSON 必须包含 \`dt.si\` 外层包装
-          - 必需字段: \`rl\`, \`sid\`, \`ml\`, \`cs\`, \`tbb\`, \`blb\`, \`blab\`, \`bl\`, \`aw\`, \`wp\`"
+          \`\`\`
+          {\"code\":200,\"msg\":\"success\",\"data\":{\"rl\":[...],\"sid\":\"...\",\"singleBet\":120,...}}
+          \`\`\`"
 
       - name: Update README navigation
         if: steps.extract.outputs.found == 'true' && steps.process.outputs.success == 'true'
