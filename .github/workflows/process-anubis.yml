@@ -23,6 +23,7 @@ jobs:
         id: extract
         env:
           ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
         run: |
           # Match GitHub attachment URLs ending in .zip or .txt
           FILE_URL=$(echo "$ISSUE_BODY" | grep -oP 'https://github\.com/[^\s\)\]]+\.(zip|txt)' | head -1)
@@ -42,8 +43,11 @@ jobs:
             echo "filetype=zip" >> "$GITHUB_OUTPUT"
           fi
 
-          # 提取自定义 token（格式: token: xxx）
-          CUSTOM_TOKEN=$(echo "$ISSUE_BODY" | grep -oP '(?i)token:\s*\K\S+' | head -1)
+          # 提取自定义 token（从 body: "token: xxx" 或从 title: "token换成xxx" / "token:xxx"）
+          CUSTOM_TOKEN=$(echo "$ISSUE_BODY" | grep -oP '(?i)token[:\s]\s*\K\S+' | head -1)
+          if [ -z "$CUSTOM_TOKEN" ]; then
+            CUSTOM_TOKEN=$(echo "$ISSUE_TITLE" | grep -oP '(?i)token[换成为:\s]+\K[a-zA-Z0-9]+' | head -1)
+          fi
           if [ -n "$CUSTOM_TOKEN" ]; then
             echo "token=$CUSTOM_TOKEN" >> "$GITHUB_OUTPUT"
             echo "Found custom token: ${CUSTOM_TOKEN:0:8}..."
