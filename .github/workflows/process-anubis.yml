@@ -79,10 +79,20 @@ jobs:
           {\"code\":200,\"msg\":\"success\",\"data\":{\"rl\":[...],\"sid\":\"...\",\"singleBet\":120,...}}
           \`\`\`"
 
-      - name: Download zip
+      - name: Download file
         if: steps.extract.outputs.found == 'true'
         run: |
-          curl -L -o anubis_upload.zip "${{ steps.extract.outputs.url }}"
+          curl -L -o "anubis_upload.${{ steps.extract.outputs.filetype }}" "${{ steps.extract.outputs.url }}"
+          ls -la anubis_upload.*
+
+      - name: Convert txt to zip if needed
+        if: steps.extract.outputs.found == 'true' && steps.extract.outputs.filetype == 'txt'
+        run: |
+          mkdir -p _txt_tmp
+          cp anubis_upload.txt _txt_tmp/1.txt
+          cd _txt_tmp && zip ../anubis_upload.zip 1.txt && cd ..
+          rm -rf _txt_tmp
+          echo "Converted txt to zip"
           ls -la anubis_upload.zip
 
       - name: Process zip
