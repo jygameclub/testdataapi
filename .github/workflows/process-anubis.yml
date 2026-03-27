@@ -19,21 +19,28 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Extract zip URL and token from issue body
+      - name: Extract file URL and token from issue body
         id: extract
         env:
           ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
-          # Match GitHub attachment URLs ending in .zip
-          ZIP_URL=$(echo "$ISSUE_BODY" | grep -oP 'https://github\.com/[^\s\)\]]+\.zip' | head -1)
-          if [ -z "$ZIP_URL" ]; then
-            echo "No .zip attachment URL found in issue body"
+          # Match GitHub attachment URLs ending in .zip or .txt
+          FILE_URL=$(echo "$ISSUE_BODY" | grep -oP 'https://github\.com/[^\s\)\]]+\.(zip|txt)' | head -1)
+          if [ -z "$FILE_URL" ]; then
+            echo "No .zip or .txt attachment URL found in issue body"
             echo "found=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          echo "url=$ZIP_URL" >> "$GITHUB_OUTPUT"
+          echo "url=$FILE_URL" >> "$GITHUB_OUTPUT"
           echo "found=true" >> "$GITHUB_OUTPUT"
-          echo "Found zip URL: $ZIP_URL"
+          echo "Found file URL: $FILE_URL"
+
+          # 检测文件类型
+          if [[ "$FILE_URL" == *.txt ]]; then
+            echo "filetype=txt" >> "$GITHUB_OUTPUT"
+          else
+            echo "filetype=zip" >> "$GITHUB_OUTPUT"
+          fi
 
           # 提取自定义 token（格式: token: xxx）
           CUSTOM_TOKEN=$(echo "$ISSUE_BODY" | grep -oP '(?i)token:\s*\K\S+' | head -1)
@@ -52,25 +59,25 @@ jobs:
         run: |
           gh issue comment ${{ github.event.issue.number }} \
             --repo ${{ github.repository }} \
-            --body "⚠️ **未在 Issue 正文中找到 .zip 附件链接，跳过处理。**
+            --body "⚠️ **未在 Issue 正文中找到 .zip 或 .txt 附件链接，跳过处理。**
 
           ### 📋 提交说明
 
-          请在 Issue 正文中直接拖拽上传 \`.zip\` 文件（GitHub 会自动生成附件链接）。
+          请在 Issue 正文中直接拖拽上传 \`.zip\` 或 \`.txt\` 文件（GitHub 会自动生成附件链接）。
 
           ### 📄 支持的数据格式
 
-          **ZIP 压缩包（内含多个 .txt 文件，每个 txt 为单行 JSONL 格式）**
+          **格式一：ZIP 压缩包**（内含多个 .txt 文件，JSONL 或 pretty-printed JSON）
 
-          Anubis 仅支持 \`.zip\` 格式，zip 内每个 txt 文件每行一个 JSON 对象：
+          **格式二：单个 .txt 文件**（JSONL 或多个 pretty-printed JSON 拼接）
+
+          支持的 JSON 结构：
           \`\`\`
           {\"dt\":{\"si\":{\"rl\":[...],\"sid\":\"...\",\"ml\":1,\"cs\":2.0,...}},\"err\":null}
           \`\`\`
-
-          ### ⚠️ 注意事项
-          - 文件必须是 \`.zip\` 格式（不支持单独 .txt）
-          - JSON 必须包含 \`dt.si\` 字段
-          - 必需字段: \`rl\`, \`sid\`, \`ml\`, \`cs\`, \`tbb\`, \`blb\`, \`blab\`, \`bl\`, \`aw\`, \`wp\`"
+          \`\`\`
+          {\"code\":200,\"msg\":\"success\",\"data\":{\"rl\":[...],\"sid\":\"...\",\"singleBet\":120,...}}
+          \`\`\`"
 
       - name: Download zip
         if: steps.extract.outputs.found == 'true'
