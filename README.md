@@ -252,6 +252,7 @@ python process_tiger_txt.py
 
 | 批次 | 日期 | 数据文件 | 调试链接 |
 |------|------|---------|---------|
+| 0427_0623 | 04-27 06:23 | tiger_upload.txt | [tiger_upload](https://fish-games.s3.amazonaws.com/tiger/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=b3bb96ff1faef019504b83495ec3e45a&language=en&debug=1&debugDataUrl=https://raw.githubusercontent.com/jygameclub/testdataapi/main/tigerdate/0427_0623/tiger_upload.txt&debugStart=1) |
 | 0427_0611 | 04-27 06:11 | tiger_upload.txt | [tiger_upload](https://fish-games.s3.amazonaws.com/tiger/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=b3bb96ff1faef019504b83495ec3e45a&language=en&debug=1&debugDataUrl=https://raw.githubusercontent.com/jygameclub/testdataapi/main/tigerdate/0427_0611/tiger_upload.txt&debugStart=1) |
 | 0427_0606 | 04-27 06:06 | tiger_upload.txt | [tiger_upload](https://fish-games.s3.amazonaws.com/tiger/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=b3bb96ff1faef019504b83495ec3e45a&language=en&debug=1&debugDataUrl=https://raw.githubusercontent.com/jygameclub/testdataapi/main/tigerdate/0427_0606/tiger_upload.txt&debugStart=1) |
 | 0427_0559 | 04-27 05:59 | tiger_upload.txt | [tiger_upload](https://fish-games.s3.amazonaws.com/tiger/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=b3bb96ff1faef019504b83495ec3e45a&language=en&debug=1&debugDataUrl=https://raw.githubusercontent.com/jygameclub/testdataapi/main/tigerdate/0427_0559/tiger_upload.txt&debugStart=1) |
