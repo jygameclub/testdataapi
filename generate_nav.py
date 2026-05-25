@@ -13,6 +13,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # 游戏配置：(目录名, 显示名, 游戏基础URL用于识别)
 GAMES = [
+    ("mahjong2date", "Mahjong Ways 2"),
     ("tigerdate", "Fortune-Tiger"),
     ("oxdate", "Fortune-Ox"),
     ("anubisdate", "Anubis"),
@@ -27,10 +28,12 @@ def _parse_date_dir(name: str) -> str:
 
 
 def _get_data_files(batch_dir: str) -> list[str]:
-    """获取批次目录中的数据文件（排除 url.txt）。"""
+    """获取批次目录中的数据文件（排除 url.txt/manifest.json）。"""
     files = []
     for f in sorted(os.listdir(batch_dir)):
-        if f.endswith(".txt") and f != "url.txt":
+        if f == "url.txt" or f == "manifest.json":
+            continue
+        if f.endswith(".txt") or f.endswith(".json"):
             files.append(f)
     return files
 
@@ -93,7 +96,9 @@ def generate_nav_markdown() -> str:
             if debug_links:
                 link_parts = []
                 for idx, link in enumerate(debug_links):
-                    if idx < len(data_files):
+                    if "debugDataPath=" in link:
+                        label = "批次回放"
+                    elif idx < len(data_files):
                         label = data_files[idx].replace(".txt", "")
                     else:
                         label = f"文件{idx+1}"
