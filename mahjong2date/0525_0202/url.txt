@@ -1,0 +1,4 @@
+https://raw.githubusercontent.com/jygameclub/testdataapi/main/mahjong2date/0525_0202
+https://raw.githubusercontent.com/jygameclub/testdataapi/main/mahjong2date/0525_0202/manifest.json
+
+https://fish-games.s3.amazonaws.com/MahjongWays2/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=436475c81b51e6893c740657870f86b7&language=en&debug=1&debugDataPath=https://raw.githubusercontent.com/jygameclub/testdataapi/main/mahjong2date/0525_0202&debugStart=1
