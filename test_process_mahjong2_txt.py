@@ -191,6 +191,19 @@ class Mahjong2ProcessTests(unittest.TestCase):
             self.assertIn("wp[4]", analysis)
             self.assertIn("盘面符号=7", analysis)
 
+    def test_analysis_does_not_flag_hidden_ss_or_ssb_as_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out"
+            output.mkdir()
+            record = _full_record("400", st=1, nst=1)
+            record["ssb"] = [13, 20, 21]
+            record["ss"] = [13, 20, 21]
+            _write_json(output / "001.json", [record])
+
+            analysis = analyze_replay_dir(output, "mahjong2date/test_batch")
+
+            self.assertNotIn("majiangerrorcheck", analysis)
+
 
 def _full_record(
     sid: str,

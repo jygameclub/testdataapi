@@ -372,7 +372,7 @@ def _validate_record_shape(
                     "POSITION_RANGE",
                     f"{field_name}包含越界位置{position}，有效范围是0-{BOARD_SIZE - 1}",
                 ))
-            elif position in HIDDEN_INDEXES:
+            elif field_name == "ptbr" and position in HIDDEN_INDEXES:
                 issues.append(_majiang_issue(
                     file_name,
                     replay_start,
