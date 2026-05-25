@@ -47,6 +47,7 @@ jobs:
 
           处理逻辑：
           - 默认按每次实际扣费 bet 拆分，一个 bet 一个 \`001.json\`、\`002.json\`
+          - \`st=21/22\` 且 \`tb=0\` 属于免费旋转/续转链，不会当成新的下单起点
           - 生成 \`manifest.json\`，WebGL 通过 \`debugDataPath\` 读取整个批次目录
           - 自动生成重点测试说明：Big/Mega/Super Win、连消、多线中奖、Scatter/FreeSpin、金色符号/百搭转换
 

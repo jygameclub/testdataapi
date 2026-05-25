@@ -29,6 +29,43 @@ class Mahjong2ProcessTests(unittest.TestCase):
             manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual([group["file"] for group in manifest["groups"]], ["001.json", "002.json"])
 
+    def test_split_capture_keeps_free_spin_chain_with_paid_bet_start(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "mahjong2_upload.txt"
+            output = Path(tmp) / "out"
+            rows = [
+                {"data": _record("100", 40, 24, st=1, nst=4)},
+                {"data": _record("101", 0, 184, st=4, nst=21, psid="100")},
+                {"data": _record("102", 0, 580, st=21, nst=21, psid="100")},
+                {"data": _record("103", 0, 944, st=22, nst=21, psid="100")},
+                {"data": _record("104", 0, 944, st=21, nst=1, psid="100")},
+                {"data": _record("200", 40, 0, st=1, nst=1)},
+            ]
+            source.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
+
+            summary = split_capture(source, output, mode="bet")
+
+            self.assertEqual(summary.files_written, 2)
+            first_group = json.loads((output / "001.json").read_text(encoding="utf-8"))
+            second_group = json.loads((output / "002.json").read_text(encoding="utf-8"))
+            self.assertEqual([entry["sid"] for entry in first_group], ["100", "101", "102", "103", "104"])
+            self.assertEqual(second_group[0]["sid"], "200")
+
+    def test_analysis_links_mid_chain_file_to_paid_bet_start(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out"
+            output.mkdir()
+            _write_json(output / "001.json", [_record("100", 40, 24, st=1, nst=4)])
+            _write_json(output / "002.json", [_record("101", 0, 580, st=21, nst=21, psid="100")])
+            _write_json(output / "003.json", [_record("102", 0, 944, st=22, nst=1, psid="100")])
+
+            analysis = analyze_replay_dir(output, "mahjong2date/test_batch", token="custom-token")
+
+            self.assertIn("003.json", analysis)
+            self.assertIn("- Scatter / Free Spin 回放: 2", analysis)
+            self.assertIn("debugStart=1", analysis)
+            self.assertNotIn("debugStart=3", analysis)
+
     def test_build_url_lines_uses_debug_data_path_for_directory_replay(self):
         lines = build_url_lines("mahjong2date/0525_0910", token="custom-token")
 
@@ -100,11 +137,13 @@ def _record(
     sc: int = 0,
     fs: dict | None = None,
     ptbr: list[int] | None = None,
+    psid: str | None = None,
 ) -> dict:
     wp = {str(index): [index, index + 1] for index in range(1, wp_count + 1)} if wp_count else None
     lw = {str(index): float(win / wp_count) for index in range(1, wp_count + 1)} if wp_count else None
     return {
         "sid": sid,
+        "psid": psid or sid,
         "spinId": f"spin-{sid}",
         "st": st,
         "nst": nst,
@@ -126,6 +165,10 @@ def _record(
         "fs": fs,
         "ptbr": ptbr or [],
     }
+
+
+def _write_json(path: Path, value: object) -> None:
+    path.write_text(json.dumps(value), encoding="utf-8")
 
 
 if __name__ == "__main__":

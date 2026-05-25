@@ -124,7 +124,7 @@ def _float_value(value: Any) -> float:
 
 
 def _is_paid_bet(data: dict[str, Any]) -> bool:
-    return data.get("st") in (1, 21) or _float_value(data.get("tb")) > 0
+    return _float_value(data.get("st")) == 1 or _float_value(data.get("tb")) > 0
 
 
 def _group_by_paid_bet(entries: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
@@ -231,6 +231,8 @@ def _win_type(multiplier: float, total_win: float) -> str:
 def _has_free_spin(records: list[dict[str, Any]]) -> bool:
     for record in records:
         fs = record.get("fs")
+        if _float_value(record.get("st")) in (21, 22) or _float_value(record.get("nst")) in (21, 22):
+            return True
         if _float_value(record.get("sc")) >= FREE_SPIN_SCATTER_COUNT:
             return True
         if isinstance(fs, dict) and (_float_value(fs.get("ts")) > 0 or _float_value(fs.get("s")) > 0):
@@ -247,9 +249,55 @@ def _has_gold_transform(records: list[dict[str, Any]]) -> bool:
     return False
 
 
-def _summarize_replay_file(path: Path, github_path: str, token: str | None = None) -> dict[str, Any]:
+def _file_index(path: Path) -> int:
+    return int(path.stem) if path.stem.isdigit() else 1
+
+
+def _chain_key(records: list[dict[str, Any]]) -> str:
+    if not records:
+        return ""
+
+    first = records[0]
+    if _is_paid_bet(first):
+        return str(first.get("sid") or first.get("psid") or first.get("spinId") or "")
+
+    return str(first.get("psid") or first.get("sid") or first.get("spinId") or "")
+
+
+def _build_replay_start_index_lookup(paths: list[Path]) -> dict[int, int]:
+    records_by_path = {path: _records_from_file(path) for path in paths}
+    earliest_by_chain: dict[str, int] = {}
+    paid_start_by_chain: dict[str, int] = {}
+
+    for path, records in records_by_path.items():
+        if not records:
+            continue
+        index = _file_index(path)
+        chain_key = _chain_key(records)
+        if not chain_key:
+            continue
+        earliest_by_chain[chain_key] = min(index, earliest_by_chain.get(chain_key, index))
+        if _is_paid_bet(records[0]):
+            paid_start_by_chain[chain_key] = min(index, paid_start_by_chain.get(chain_key, index))
+
+    lookup: dict[int, int] = {}
+    for path, records in records_by_path.items():
+        index = _file_index(path)
+        chain_key = _chain_key(records)
+        lookup[index] = paid_start_by_chain.get(chain_key, earliest_by_chain.get(chain_key, index))
+
+    return lookup
+
+
+def _summarize_replay_file(
+    path: Path,
+    github_path: str,
+    token: str | None = None,
+    replay_start_index: int | None = None,
+) -> dict[str, Any]:
     records = _records_from_file(path)
-    file_index = int(path.stem) if path.stem.isdigit() else 1
+    file_index = _file_index(path)
+    replay_start = replay_start_index or file_index
     total_bet = _bet_amount(records)
     total_win = _final_win(records)
     multiplier = total_win / total_bet if total_bet > 0 else 0.0
@@ -259,7 +307,7 @@ def _summarize_replay_file(path: Path, github_path: str, token: str | None = Non
         _game_url_base(token),
         {
             "debugDataPath": f"{GITHUB_RAW_BASE}/{github_path.strip('/')}",
-            "debugStart": file_index,
+            "debugStart": replay_start,
         },
     )
     cascade_count = max(0, len(records) - 1)
@@ -283,6 +331,7 @@ def _summarize_replay_file(path: Path, github_path: str, token: str | None = Non
     return {
         "file": path.name,
         "index": file_index,
+        "replay_start_index": replay_start,
         "request_count": len(records),
         "sid": records[0].get("sid") if records else "",
         "last_sid": records[-1].get("sid") if records else "",
@@ -341,7 +390,7 @@ def _table_row(summary: dict[str, Any], include_reason: bool = True) -> str:
     reason = " / ".join(summary["reasons"]) if summary["reasons"] else "-"
     cells = [
         summary["file"],
-        _link(f"从第{summary['index']}次开始", summary["debug_link"]),
+        _link(f"从第{summary['replay_start_index']}次开始", summary["debug_link"]),
         summary["win_type"],
         _money(summary["total_win"]),
         _multiplier(summary["multiplier"]),
@@ -358,10 +407,20 @@ def _table_row(summary: dict[str, Any], include_reason: bool = True) -> str:
 
 def analyze_replay_dir(output_dir: Path | str, github_path: str, token: str | None = None) -> str:
     replay_dir = Path(output_dir)
-    summaries = [
-        _summarize_replay_file(path, github_path, token=token)
+    replay_paths = [
+        path
         for path in sorted(replay_dir.glob("*.json"))
         if path.name != "manifest.json"
+    ]
+    replay_start_lookup = _build_replay_start_index_lookup(replay_paths)
+    summaries = [
+        _summarize_replay_file(
+            path,
+            github_path,
+            token=token,
+            replay_start_index=replay_start_lookup.get(_file_index(path)),
+        )
+        for path in replay_paths
     ]
 
     total_files = len(summaries)

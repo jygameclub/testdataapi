@@ -238,7 +238,7 @@ python process_tiger_txt.py
 
 ### 支持的数据格式
 
-支持 `xxbet_capture_*.txt` 这类 JSONL 抓包文件，每行一个 JSON 对象。脚本会提取 `data` 或 `dt.si` 中的 spin 数据，并按“每次实际扣费 bet”拆成 `001.json`、`002.json` 等回放文件。
+支持 `xxbet_capture_*.txt` 这类 JSONL 抓包文件，每行一个 JSON 对象。脚本会提取 `data` 或 `dt.si` 中的 spin 数据，并按“每次实际扣费 bet”拆成 `001.json`、`002.json` 等回放文件。`st=21/22` 且 `tb=0` 属于免费旋转/续转链，不会当成新的下单起点。
 
 批次目录会额外生成 `manifest.json`，WebGL 可通过 `debugDataPath` 读取目录并按 manifest 顺序回放。
 
