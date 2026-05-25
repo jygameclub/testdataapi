@@ -374,6 +374,12 @@ Anubis / Ox / Tiger 转换过程会从原始 spin 数据中提取 `si` 对象，
 
 ## 历史数据导航
 
+### Mahjong Ways 1
+
+| 批次 | 日期 | 数据文件 | 调试链接 |
+|------|------|---------|---------|
+| 0525_0842 | 05-25 08:42 | 001.json ~ validation_summary.json (1001个文件) | [批次回放](https://fish-games.s3.amazonaws.com/MahjongWays1/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=436475c81b51e6893c740657870f86b7&language=en&debug=1&debugDataPath=https://raw.githubusercontent.com/jygameclub/testdataapi/main/mahjong1date/0525_0842&debugStart=1) |
+
 ### Mahjong Ways 2
 
 | 批次 | 日期 | 数据文件 | 调试链接 |
