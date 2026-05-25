@@ -6,6 +6,7 @@ from pathlib import Path
 
 from process_mahjong1_txt import (
     analyze_replay_dir,
+    build_validation_blocked_markdown,
     build_url_lines,
     is_mahjong1_title,
     process_txt,
@@ -145,6 +146,28 @@ class Mahjong1ProcessTests(unittest.TestCase):
                 self.assertEqual(summary["issues"][0]["code"], "WP_BOARD_MISMATCH")
             finally:
                 shutil.rmtree(output, ignore_errors=True)
+
+    def test_validation_blocked_markdown_does_not_emit_dead_raw_links(self):
+        markdown = build_validation_blocked_markdown({
+            "has_errors": True,
+            "error_count": 1,
+            "max_severity": "高危",
+            "issues": [{
+                "file": "738.json",
+                "entry_index": 2,
+                "sid": "703663",
+                "severity": "高危",
+                "code": "NEXT_RL_RESTORE_MISMATCH",
+                "message": "restore mismatch",
+                "debug_link": "https://raw.githubusercontent.com/jygameclub/testdataapi/main/mahjong1date/0525_0759",
+                "replay_start_index": 738,
+            }],
+        })
+
+        self.assertIn("NEXT_RL_RESTORE_MISMATCH", markdown)
+        self.assertIn("已阻断提交", markdown)
+        self.assertNotIn("https://raw.githubusercontent.com/jygameclub/testdataapi/main/mahjong1date/0525_0759", markdown)
+        self.assertNotIn("debugDataPath=https://raw.githubusercontent.com", markdown)
 
 
 def _record(sid: str, st: int = 1, win: float = 0, psid: str | None = None) -> dict:

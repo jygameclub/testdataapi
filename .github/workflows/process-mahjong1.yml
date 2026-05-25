@@ -143,7 +143,7 @@ jobs:
           import json
           from pathlib import Path
           try:
-              from process_mahjong1_txt import process_file
+              from process_mahjong1_txt import build_validation_blocked_markdown, process_file
               token = os.environ.get('CUSTOM_TOKEN') or None
               date_dir, url_file, count, analysis_md = process_file('mahjong1_upload.${{ steps.extract.outputs.ext }}', token=token)
               if count == 0:
@@ -157,6 +157,8 @@ jobs:
               summary_path = Path('mahjong1date') / date_dir / 'validation_summary.json'
               validation_summary = json.loads(summary_path.read_text(encoding='utf-8')) if summary_path.exists() else {}
               if validation_summary.get('has_errors'):
+                  with open('validation_error_summary.md', 'w', encoding='utf-8') as vf:
+                      vf.write(build_validation_blocked_markdown(validation_summary))
                   first_issue = (validation_summary.get('issues') or [{}])[0]
                   error_message = (
                       f'Mahjong1 数据校验失败: {validation_summary.get("error_count", 0)} 个高危问题; '
@@ -189,7 +191,11 @@ jobs:
             printf '❌ **Mahjong1 数据处理失败**\n\n'
             printf '**错误信息:** %s\n\n' "${{ steps.process.outputs.error }}"
 
-            if [ -f analysis_result.md ]; then
+            if [ -f validation_error_summary.md ]; then
+              printf -- '---\n\n'
+              cat validation_error_summary.md
+              printf '\n'
+            elif [ -f analysis_result.md ]; then
               printf -- '---\n\n'
               printf '## 数据校验摘要\n\n'
               cat analysis_result.md

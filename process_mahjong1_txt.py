@@ -769,6 +769,47 @@ def write_validation_summary_file(output_dir: Path | str, github_path: str, toke
     return summary_path
 
 
+def build_validation_blocked_markdown(validation_summary: dict[str, Any]) -> str:
+    issues = validation_summary.get("issues") or []
+    lines = [
+        "## 数据校验摘要",
+        "",
+        f"- 高危问题数: {validation_summary.get('error_count', len(issues))}",
+        f"- 最高严重度: {validation_summary.get('max_severity', '-')}",
+        "- 处理结果: 已阻断提交到 `mahjong1date`，所以本批次不会生成可用的 raw GitHub 回放链接。",
+        "",
+        "这类失败批次不能直接使用 raw GitHub 批次目录测试；目录没有提交时，WebGL 加载 `manifest.json` 和回放 JSON 会返回 404。",
+        "",
+    ]
+
+    if issues:
+        lines.extend([
+            "| 文件 | 位置/SID | 严重度 | 类型 | 说明 |",
+            "|------|----------|--------|------|------|",
+        ])
+        for issue in issues[:20]:
+            location = f"entry={issue.get('entry_index', '')}, sid={issue.get('sid', '')}"
+            lines.append(
+                "| "
+                + " | ".join([
+                    _markdown_cell(str(issue.get("file", ""))),
+                    _markdown_cell(location),
+                    _markdown_cell(str(issue.get("severity", ""))),
+                    _markdown_cell(str(issue.get("code", ""))),
+                    _markdown_cell(str(issue.get("message", ""))),
+                ])
+                + " |"
+            )
+        if len(issues) > 20:
+            lines.append(f"\n_仅展示前 20 个问题，完整列表见 workflow 生成的 `{VALIDATION_SUMMARY_FILE}`。_")
+
+    lines.extend([
+        "",
+        "如需本地复现，请先用脚本在本地生成回放目录，再起本地 HTTP 服务，把 Unity URL 的 `debugDataPath` 指向该本地服务地址。",
+    ])
+    return "\n".join(lines)
+
+
 def _majiang_error_section(issues: list[dict[str, Any]]) -> list[str]:
     if not issues:
         return []
