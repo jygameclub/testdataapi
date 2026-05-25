@@ -200,9 +200,6 @@ jobs:
             --repo ${{ github.repository }} \
             --add-label "待修复" || true
 
-          URL_CONTENT=$(cat "${{ steps.process.outputs.url_file }}")
-          ANALYSIS_CONTENT=$(cat analysis_result.md 2>/dev/null || echo "_无分析数据_")
-
           USED_TOKEN="${{ steps.extract.outputs.token }}"
           if [ -z "$USED_TOKEN" ]; then
             USED_TOKEN="436475c81b51e6893c740657870f86b7"
@@ -211,27 +208,22 @@ jobs:
             TOKEN_SOURCE="自定义"
           fi
 
+          {
+            printf '✅ **Mahjong2 数据处理完成！** 共 %s 个回放文件。\n\n' "${{ steps.process.outputs.count }}"
+            printf '```\n'
+            cat "${{ steps.process.outputs.url_file }}"
+            printf '\n```\n\n---\n\n'
+            printf '## 数据分析摘要\n\n'
+            cat analysis_result.md 2>/dev/null || printf '_无分析数据_\n'
+            printf '\n\n---\n\n'
+            printf '当前使用的 token（%s）: `%s`\n\n' "$TOKEN_SOURCE" "$USED_TOKEN"
+            printf '链接使用 `debugDataPath` 读取整个批次目录；WebGL 会先加载 `manifest.json`，再按顺序读取 `001.json`、`002.json`。\n\n'
+            printf '生产入口基址：\n'
+            printf '```\n'
+            printf 'https://fish-games.s3.amazonaws.com/MahjongWays2/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=%s&language=en\n' "$USED_TOKEN"
+            printf '```\n'
+          } > comment_body.md
+
           gh issue comment ${{ github.event.issue.number }} \
             --repo ${{ github.repository }} \
-            --body "✅ **Mahjong2 数据处理完成！** 共 ${{ steps.process.outputs.count }} 个回放文件。
-
-          \`\`\`
-          ${URL_CONTENT}
-          \`\`\`
-
-          ---
-
-          ## 数据分析摘要
-
-          ${ANALYSIS_CONTENT}
-
-          ---
-
-          当前使用的 token（${TOKEN_SOURCE}）: \`${USED_TOKEN}\`
-
-          链接使用 \`debugDataPath\` 读取整个批次目录；WebGL 会先加载 \`manifest.json\`，再按顺序读取 \`001.json\`、\`002.json\`。
-
-          生产入口基址：
-          \`\`\`
-          https://fish-games.s3.amazonaws.com/MahjongWays2/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=${USED_TOKEN}&language=en
-          \`\`\`"
+            --body-file comment_body.md
