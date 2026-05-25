@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
 import shutil
@@ -33,6 +34,53 @@ BOARD_SIZE = REEL_COUNT * REEL_HEIGHT
 WILD_SYMBOL = 0
 SCATTER_SYMBOL = 1
 HIDDEN_INDEXES = {0, 5, 6, 7, 13, 14, 20, 21, 27, 28, 33, 34}
+RECOMMENDED_CSV_FILE = "recommended_replays.csv"
+ALL_REPLAYS_CSV_FILE = "all_replays.csv"
+ANALYSIS_TABLE_HEADER = "| 文件 | 特征标签 | 回放链接 | 类型 | 总赢 | 倍率 | 请求数 | 中奖线 | Scatter | 起始SID | 结束SID | 为什么要测 |"
+ANALYSIS_TABLE_DIVIDER = "|------|----------|----------|------|------|------|--------|--------|---------|---------|---------|------------|"
+CSV_COLUMNS = [
+    "测试类型",
+    "文件",
+    "编号",
+    "推荐分",
+    "特征标签",
+    "回放链接",
+    "json绝对地址",
+    "数据目录",
+    "类型",
+    "总赢",
+    "倍率",
+    "请求数",
+    "掉落次数",
+    "补牌总数",
+    "消除位置总数",
+    "wp中奖位置总数",
+    "wild总数(可见盘面)",
+    "单次最大wild数(可见盘面)",
+    "是否免费旋转",
+    "免费送胡",
+    "是否金色百搭",
+    "中奖线",
+    "Scatter",
+    "起始SID",
+    "结束SID",
+    "spinId",
+    "起始余额",
+    "结束余额",
+    "为什么要测",
+]
+CSV_TYPE_ORDER = {
+    "免费中大奖": 10,
+    "Super Mega Win": 20,
+    "Mega Win": 30,
+    "Big Win": 40,
+    "免费送胡": 50,
+    "免费旋转": 60,
+    "连消/掉落": 70,
+    "金色/百搭": 80,
+    "普通中奖": 90,
+    "普通空转": 100,
+}
 MAHJONG2_TITLE_ALIASES = (
     "mahjong2",
     "mahjongways2",
@@ -82,7 +130,15 @@ def build_url_lines(github_path: str, token: str | None = None, start: int = 1) 
         _game_url_base(token),
         {"debugDataPath": data_path, "debugStart": max(1, start)},
     )
-    return [data_path, f"{data_path}/manifest.json", "", game_link]
+    return [
+        data_path,
+        f"{data_path}/manifest.json",
+        "",
+        game_link,
+        "",
+        f"{data_path}/{RECOMMENDED_CSV_FILE}",
+        f"{data_path}/{ALL_REPLAYS_CSV_FILE}",
+    ]
 
 
 def _load_json_lines(source: Path) -> tuple[list[dict[str, Any]], int]:
@@ -639,6 +695,72 @@ def _has_free_spin(records: list[dict[str, Any]]) -> bool:
     return False
 
 
+def _is_free_spin_round(record: dict[str, Any]) -> bool:
+    fs = record.get("fs")
+    if _float_value(record.get("st")) in (21, 22):
+        return True
+    return (
+        _float_value(record.get("tb")) == 0
+        and isinstance(fs, dict)
+        and (_float_value(fs.get("ts")) > 0 or _float_value(fs.get("s")) > 0)
+    )
+
+
+def _has_free_spin_win(records: list[dict[str, Any]]) -> bool:
+    for record in records:
+        if not _is_free_spin_round(record):
+            continue
+        if _record_has_win(record) or _float_value(record.get("aw")) > 0 or _float_value(record.get("ssaw")) > 0:
+            return True
+    return False
+
+
+def _rns_drop_symbol_count(records: list[dict[str, Any]]) -> int:
+    count = 0
+    for record in records:
+        rs = record.get("rs")
+        rns = rs.get("rns") if isinstance(rs, dict) else None
+        if not isinstance(rns, list):
+            continue
+        for reel_symbols in rns:
+            if isinstance(reel_symbols, list):
+                count += len(reel_symbols)
+    return count
+
+
+def _ptbr_position_count(records: list[dict[str, Any]]) -> int:
+    return sum(len(_int_list(record.get("ptbr"))) for record in records)
+
+
+def _wp_position_count(records: list[dict[str, Any]]) -> int:
+    count = 0
+    for record in records:
+        for positions in _wp_positions(record).values():
+            count += len(positions)
+    return count
+
+
+def _visible_wild_count(record: dict[str, Any]) -> int:
+    rl = record.get("rl")
+    if not isinstance(rl, list):
+        return 0
+
+    if len(rl) >= BOARD_SIZE:
+        positions = range(BOARD_SIZE)
+        return sum(
+            1
+            for position in positions
+            if _is_active_position(position) and _int_value(rl[position]) == WILD_SYMBOL
+        )
+
+    return sum(1 for value in rl if _int_value(value) == WILD_SYMBOL)
+
+
+def _wild_counts(records: list[dict[str, Any]]) -> tuple[int, int]:
+    counts = [_visible_wild_count(record) for record in records]
+    return sum(counts), max(counts, default=0)
+
+
 def _has_gold_transform(records: list[dict[str, Any]]) -> bool:
     for record in records:
         if record.get("ptbr"):
@@ -646,6 +768,39 @@ def _has_gold_transform(records: list[dict[str, Any]]) -> bool:
         if record.get("rs") or record.get("rsc"):
             return True
     return False
+
+
+def _feature_tags(records: list[dict[str, Any]], win_type: str) -> list[str]:
+    tags: list[str] = []
+    has_free_spin = _has_free_spin(records)
+    if has_free_spin:
+        tags.append("免费旋转")
+    if has_free_spin and win_type in {"Big Win", "Mega Win", "Super Mega Win"}:
+        tags.append("免费中大奖")
+    if _has_free_spin_win(records):
+        tags.append("免费送胡")
+    if _has_gold_transform(records):
+        tags.append("金色/百搭")
+    return tags
+
+
+def _csv_test_type(summary: dict[str, Any]) -> str:
+    tags = set(summary.get("feature_tags") or [])
+    if "免费中大奖" in tags:
+        return "免费中大奖"
+    if summary["win_type"] in {"Super Mega Win", "Mega Win", "Big Win"}:
+        return summary["win_type"]
+    if "免费送胡" in tags:
+        return "免费送胡"
+    if "免费旋转" in tags:
+        return "免费旋转"
+    if summary["cascade_count"] > 0 or summary["has_continue_state"]:
+        return "连消/掉落"
+    if "金色/百搭" in tags:
+        return "金色/百搭"
+    if summary["total_win"] > 0:
+        return "普通中奖"
+    return "普通空转"
 
 
 def _file_index(path: Path) -> int:
@@ -702,30 +857,37 @@ def _summarize_replay_file(
     multiplier = total_win / total_bet if total_bet > 0 else 0.0
     win_lines = [_count_win_lines(record) for record in records]
     scatter_count = max((_float_value(record.get("sc")) for record in records), default=0.0)
+    data_dir_url = f"{GITHUB_RAW_BASE}/{github_path.strip('/')}"
     debug_link = _with_query_params(
         _game_url_base(token),
         {
-            "debugDataPath": f"{GITHUB_RAW_BASE}/{github_path.strip('/')}",
+            "debugDataPath": data_dir_url,
             "debugStart": replay_start,
         },
     )
     cascade_count = max(0, len(records) - 1)
     has_continue_state = any(record.get("st") in (4, 22) or record.get("nst") in (4, 22) for record in records)
     win_type = _win_type(multiplier, total_win)
+    has_free_spin = _has_free_spin(records)
+    has_free_spin_win = _has_free_spin_win(records)
+    has_gold_transform = _has_gold_transform(records)
+    wild_count, max_wild_count = _wild_counts(records)
 
     reasons = []
     if win_type in {"Big Win", "Mega Win", "Super Mega Win"}:
         reasons.append(win_type)
     if cascade_count > 0 or has_continue_state:
         reasons.append(f"{len(records)}段连消/续转")
-    if _has_free_spin(records):
+    if has_free_spin:
         reasons.append("Scatter / Free Spin")
-    if _has_gold_transform(records):
+    if has_gold_transform:
         reasons.append("金色符号/百搭转换")
     if max(win_lines, default=0) >= 3:
         reasons.append(f"多线中奖 {max(win_lines)}线")
     if total_win > 0 and not reasons:
         reasons.append("普通中奖覆盖")
+
+    feature_tags = _feature_tags(records, win_type)
 
     return {
         "file": path.name,
@@ -735,16 +897,25 @@ def _summarize_replay_file(
         "sid": records[0].get("sid") if records else "",
         "last_sid": records[-1].get("sid") if records else "",
         "spinId": records[0].get("spinId") if records else "",
+        "data_dir_url": data_dir_url,
+        "json_url": f"{data_dir_url}/{path.name}",
         "total_bet": total_bet,
         "total_win": total_win,
         "multiplier": multiplier,
         "win_type": win_type,
         "max_win_lines": max(win_lines, default=0),
         "scatter_count": scatter_count,
-        "has_free_spin": _has_free_spin(records),
-        "has_gold_transform": _has_gold_transform(records),
+        "has_free_spin": has_free_spin,
+        "has_free_spin_win": has_free_spin_win,
+        "has_gold_transform": has_gold_transform,
+        "feature_tags": feature_tags,
         "cascade_count": cascade_count,
         "has_continue_state": has_continue_state,
+        "drop_symbol_count": _rns_drop_symbol_count(records),
+        "ptbr_position_count": _ptbr_position_count(records),
+        "wp_position_count": _wp_position_count(records),
+        "wild_count": wild_count,
+        "max_wild_count": max_wild_count,
         "start_balance": records[0].get("blb") if records else "",
         "end_balance": records[-1].get("bl") if records else "",
         "reasons": reasons,
@@ -787,8 +958,10 @@ def _link(label: str, url: str) -> str:
 
 def _table_row(summary: dict[str, Any], include_reason: bool = True) -> str:
     reason = " / ".join(summary["reasons"]) if summary["reasons"] else "-"
+    feature_tags = " / ".join(summary.get("feature_tags") or []) or "-"
     cells = [
         summary["file"],
+        feature_tags,
         _link(f"从第{summary['replay_start_index']}次开始", summary["debug_link"]),
         summary["win_type"],
         _money(summary["total_win"]),
@@ -802,6 +975,99 @@ def _table_row(summary: dict[str, Any], include_reason: bool = True) -> str:
     if include_reason:
         cells.append(reason)
     return "| " + " | ".join(cells) + " |"
+
+
+def _yes_no(value: bool) -> str:
+    return "是" if value else "否"
+
+
+def _csv_sort_key(summary: dict[str, Any]) -> tuple[int, int, float, int, int]:
+    test_type = _csv_test_type(summary)
+    return (
+        CSV_TYPE_ORDER.get(test_type, 999),
+        -_priority_score(summary),
+        -summary["total_win"],
+        -summary["request_count"],
+        summary["index"],
+    )
+
+
+def _summary_csv_row(summary: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "测试类型": _csv_test_type(summary),
+        "文件": summary["file"],
+        "编号": summary["index"],
+        "推荐分": _priority_score(summary),
+        "特征标签": " / ".join(summary.get("feature_tags") or []),
+        "回放链接": summary["debug_link"],
+        "json绝对地址": summary["json_url"],
+        "数据目录": summary["data_dir_url"],
+        "类型": summary["win_type"],
+        "总赢": f"{summary['total_win']:.2f}",
+        "倍率": f"{summary['multiplier']:.2f}",
+        "请求数": summary["request_count"],
+        "掉落次数": summary["cascade_count"],
+        "补牌总数": summary["drop_symbol_count"],
+        "消除位置总数": summary["ptbr_position_count"],
+        "wp中奖位置总数": summary["wp_position_count"],
+        "wild总数(可见盘面)": summary["wild_count"],
+        "单次最大wild数(可见盘面)": summary["max_wild_count"],
+        "是否免费旋转": _yes_no(summary["has_free_spin"]),
+        "免费送胡": _yes_no(summary["has_free_spin_win"]),
+        "是否金色百搭": _yes_no(summary["has_gold_transform"]),
+        "中奖线": summary["max_win_lines"],
+        "Scatter": int(summary["scatter_count"]),
+        "起始SID": summary["sid"],
+        "结束SID": summary["last_sid"],
+        "spinId": summary["spinId"],
+        "起始余额": summary["start_balance"],
+        "结束余额": summary["end_balance"],
+        "为什么要测": " / ".join(summary["reasons"]) if summary["reasons"] else "",
+    }
+
+
+def _write_summary_csv(path: Path, summaries: list[dict[str, Any]]) -> None:
+    with path.open("w", encoding="utf-8-sig", newline="") as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=CSV_COLUMNS)
+        writer.writeheader()
+        for summary in summaries:
+            writer.writerow(_summary_csv_row(summary))
+
+
+def _replay_summaries(output_dir: Path | str, github_path: str, token: str | None = None) -> list[dict[str, Any]]:
+    replay_dir = Path(output_dir)
+    replay_paths = [
+        path
+        for path in sorted(replay_dir.glob("*.json"))
+        if path.name != "manifest.json"
+    ]
+    replay_start_lookup = _build_replay_start_index_lookup(replay_paths)
+    return [
+        _summarize_replay_file(
+            path,
+            github_path,
+            token=token,
+            replay_start_index=replay_start_lookup.get(_file_index(path)),
+        )
+        for path in replay_paths
+    ]
+
+
+def write_replay_csv_files(
+    output_dir: Path | str,
+    github_path: str,
+    token: str | None = None,
+) -> tuple[Path, Path]:
+    replay_dir = Path(output_dir)
+    summaries = _replay_summaries(replay_dir, github_path, token=token)
+    sorted_summaries = sorted(summaries, key=_csv_sort_key)
+    recommended = [summary for summary in sorted_summaries if _priority_score(summary) > 0]
+    recommended_path = replay_dir / RECOMMENDED_CSV_FILE
+    all_path = replay_dir / ALL_REPLAYS_CSV_FILE
+
+    _write_summary_csv(recommended_path, recommended)
+    _write_summary_csv(all_path, sorted_summaries)
+    return recommended_path, all_path
 
 
 def analyze_replay_dir(output_dir: Path | str, github_path: str, token: str | None = None) -> str:
@@ -858,6 +1124,15 @@ def analyze_replay_dir(output_dir: Path | str, github_path: str, token: str | No
         f"- 金色符号/百搭转换回放: {len(gold_transforms)}",
     ]
 
+    csv_base = f"{GITHUB_RAW_BASE}/{github_path.strip('/')}"
+    lines.extend([
+        "",
+        "### CSV 下载",
+        "",
+        f"- 推荐测试 CSV（第一个 tab）: [{RECOMMENDED_CSV_FILE}]({csv_base}/{RECOMMENDED_CSV_FILE})",
+        f"- 全部内容 CSV（第二个 tab）: [{ALL_REPLAYS_CSV_FILE}]({csv_base}/{ALL_REPLAYS_CSV_FILE})",
+    ])
+
     lines.extend(_majiang_error_section(majiang_issues))
 
     if top_replays:
@@ -865,8 +1140,8 @@ def analyze_replay_dir(output_dir: Path | str, github_path: str, token: str | No
             "",
             "### 重点测试回放建议",
             "",
-            "| 文件 | 回放链接 | 类型 | 总赢 | 倍率 | 请求数 | 中奖线 | Scatter | 起始SID | 结束SID | 为什么要测 |",
-            "|------|----------|------|------|------|--------|--------|---------|---------|---------|------------|",
+            ANALYSIS_TABLE_HEADER,
+            ANALYSIS_TABLE_DIVIDER,
         ])
         for summary in top_replays[:40]:
             lines.append(_table_row(summary))
@@ -876,8 +1151,8 @@ def analyze_replay_dir(output_dir: Path | str, github_path: str, token: str | No
             "",
             "### Big / Mega / Super Win",
             "",
-            "| 文件 | 回放链接 | 类型 | 总赢 | 倍率 | 请求数 | 中奖线 | Scatter | 起始SID | 结束SID | 为什么要测 |",
-            "|------|----------|------|------|------|--------|--------|---------|---------|---------|------------|",
+            ANALYSIS_TABLE_HEADER,
+            ANALYSIS_TABLE_DIVIDER,
         ])
         for summary in sorted(big_wins, key=lambda item: item["multiplier"], reverse=True):
             lines.append(_table_row(summary))
@@ -887,8 +1162,8 @@ def analyze_replay_dir(output_dir: Path | str, github_path: str, token: str | No
             "",
             "### 连消/多段回放",
             "",
-            "| 文件 | 回放链接 | 类型 | 总赢 | 倍率 | 请求数 | 中奖线 | Scatter | 起始SID | 结束SID | 为什么要测 |",
-            "|------|----------|------|------|------|--------|--------|---------|---------|---------|------------|",
+            ANALYSIS_TABLE_HEADER,
+            ANALYSIS_TABLE_DIVIDER,
         ])
         for summary in sorted(cascades, key=lambda item: (item["request_count"], item["total_win"]), reverse=True)[:40]:
             lines.append(_table_row(summary))
@@ -898,8 +1173,8 @@ def analyze_replay_dir(output_dir: Path | str, github_path: str, token: str | No
             "",
             "### Scatter / Free Spin",
             "",
-            "| 文件 | 回放链接 | 类型 | 总赢 | 倍率 | 请求数 | 中奖线 | Scatter | 起始SID | 结束SID | 为什么要测 |",
-            "|------|----------|------|------|------|--------|--------|---------|---------|---------|------------|",
+            ANALYSIS_TABLE_HEADER,
+            ANALYSIS_TABLE_DIVIDER,
         ])
         for summary in sorted(free_spins, key=lambda item: (item["scatter_count"], item["total_win"]), reverse=True):
             lines.append(_table_row(summary))
@@ -909,8 +1184,8 @@ def analyze_replay_dir(output_dir: Path | str, github_path: str, token: str | No
             "",
             "### 金色符号 / 百搭转换",
             "",
-            "| 文件 | 回放链接 | 类型 | 总赢 | 倍率 | 请求数 | 中奖线 | Scatter | 起始SID | 结束SID | 为什么要测 |",
-            "|------|----------|------|------|------|--------|--------|---------|---------|---------|------------|",
+            ANALYSIS_TABLE_HEADER,
+            ANALYSIS_TABLE_DIVIDER,
         ])
         for summary in sorted(gold_transforms, key=lambda item: (item["request_count"], item["total_win"]), reverse=True)[:40]:
             lines.append(_table_row(summary))
@@ -920,8 +1195,8 @@ def analyze_replay_dir(output_dir: Path | str, github_path: str, token: str | No
             "",
             "### 全量中奖明细",
             "",
-            "| 文件 | 回放链接 | 类型 | 总赢 | 倍率 | 请求数 | 中奖线 | Scatter | 起始SID | 结束SID | 为什么要测 |",
-            "|------|----------|------|------|------|--------|--------|---------|---------|---------|------------|",
+            ANALYSIS_TABLE_HEADER,
+            ANALYSIS_TABLE_DIVIDER,
         ])
         for summary in sorted(winning, key=lambda item: item["index"]):
             lines.append(_table_row(summary))
@@ -1000,6 +1275,7 @@ def process_txt(
 
     summary = split_capture(txt_path, output_dir, mode=mode)
     github_path = f"mahjong2date/{batch}"
+    write_replay_csv_files(output_dir, github_path, token=token)
     url_file = _write_url_file(output_dir, github_path, token=token)
     analysis = _write_analysis_file(output_dir, github_path, token=token)
 
