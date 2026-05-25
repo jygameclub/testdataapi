@@ -1,0 +1,256 @@
+name: Process Mahjong1 Data
+
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  format-guide:
+    if: |
+      github.event_name == 'issue_comment' &&
+      !github.event.issue.pull_request &&
+      contains(github.event.comment.body, '这样的数据') &&
+      (
+        contains(github.event.issue.title, 'mahjong1') ||
+        contains(github.event.issue.title, 'Mahjong1') ||
+        contains(github.event.issue.title, 'MahjongWays1') ||
+        contains(github.event.issue.title, 'Mahjong Ways1') ||
+        contains(github.event.issue.title, 'Mahjong Ways 1') ||
+        contains(github.event.issue.title, 'mahjongways1') ||
+        contains(github.event.issue.title, '麻将1') ||
+        contains(github.event.issue.title, '麻将 1') ||
+        contains(github.event.issue.title, 'majianng1') ||
+        contains(github.event.issue.title, 'majiang1')
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post Mahjong1 format guide
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --body "### Mahjong1 支持的数据格式
+
+          请上传 \`xxbet_capture_*.txt\` 或 zip 文件，txt 中每行一个 JSON 对象。
+
+          支持的数据结构：
+          - \`{\"data\": {...}}\`
+          - \`{\"dt\": {\"si\": {...}}}\`
+          - 直接为 spin 数据对象
+
+          处理逻辑：
+          - 默认按每次实际扣费 bet 拆分，一个 bet 一个 \`001.json\`、\`002.json\`
+          - \`st=1\` 是一次新的实际下注起点；\`st=4/21/22\` 属于连消/免费旋转续转链
+          - 生成 \`manifest.json\`，WebGL 通过 \`debugDataPath\` 读取整个批次目录
+          - 自动生成重点测试说明：Big/Mega/Super Win、连消、多线中奖、Scatter/FreeSpin、金色符号/百搭转换
+
+          生产入口会使用：
+          \`\`\`
+          https://fish-games.s3.amazonaws.com/MahjongWays1/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=436475c81b51e6893c740657870f86b7&language=en
+          \`\`\`
+
+          生成后的调试链接会追加：
+          \`\`\`
+          &debug=1&debugDataPath=<testdataapi数据目录>&debugStart=1
+          \`\`\`
+
+          如需指定 token，在 Issue 正文写：\`token: 你的token\`。"
+
+  process:
+    if: |
+      github.event_name == 'issues' &&
+      (
+        contains(github.event.issue.title, 'mahjong1') ||
+        contains(github.event.issue.title, 'Mahjong1') ||
+        contains(github.event.issue.title, 'MahjongWays1') ||
+        contains(github.event.issue.title, 'Mahjong Ways1') ||
+        contains(github.event.issue.title, 'Mahjong Ways 1') ||
+        contains(github.event.issue.title, 'mahjongways1') ||
+        contains(github.event.issue.title, '麻将1') ||
+        contains(github.event.issue.title, '麻将 1') ||
+        contains(github.event.issue.title, 'majianng1') ||
+        contains(github.event.issue.title, 'majiang1')
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Extract attachment URL and token from issue body
+        id: extract
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          FILE_URL=$(echo "$ISSUE_BODY" | grep -oP 'https://github\.com/[^\s\)\]]+\.(txt|zip)' | head -1)
+          if [ -z "$FILE_URL" ]; then
+            echo "No .txt/.zip attachment URL found in issue body"
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "url=$FILE_URL" >> "$GITHUB_OUTPUT"
+          echo "found=true" >> "$GITHUB_OUTPUT"
+          EXT="${FILE_URL##*.}"
+          echo "ext=$EXT" >> "$GITHUB_OUTPUT"
+          echo "Found file URL: $FILE_URL (type: $EXT)"
+
+          CUSTOM_TOKEN=$(echo "$ISSUE_BODY" | grep -oP '(?i)token:\s*\K\S+' | head -1)
+          if [ -n "$CUSTOM_TOKEN" ]; then
+            echo "token=$CUSTOM_TOKEN" >> "$GITHUB_OUTPUT"
+            echo "Found custom token: ${CUSTOM_TOKEN:0:8}..."
+          else
+            echo "token=" >> "$GITHUB_OUTPUT"
+            echo "No custom token found, will use default"
+          fi
+
+      - name: Post skip comment with format guide
+        if: steps.extract.outputs.found == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --body "⚠️ **未在 Issue 正文中找到 .txt 或 .zip 附件链接，跳过处理。**
+
+          请在 Issue 正文中直接拖拽上传 Mahjong1 的 \`xxbet_capture_*.txt\` 或 zip 文件。
+
+          支持格式：每行一个 JSON 对象，spin 数据位于 \`data\` 或 \`dt.si\`。"
+
+      - name: Download file
+        if: steps.extract.outputs.found == 'true'
+        run: |
+          curl -L -o "mahjong1_upload.${{ steps.extract.outputs.ext }}" "${{ steps.extract.outputs.url }}"
+          ls -la mahjong1_upload.*
+
+      - name: Process file
+        if: steps.extract.outputs.found == 'true'
+        id: process
+        env:
+          CUSTOM_TOKEN: ${{ steps.extract.outputs.token }}
+        run: |
+          python -c "
+          import os
+          import sys
+          import json
+          from pathlib import Path
+          try:
+              from process_mahjong1_txt import process_file
+              token = os.environ.get('CUSTOM_TOKEN') or None
+              date_dir, url_file, count, analysis_md = process_file('mahjong1_upload.${{ steps.extract.outputs.ext }}', token=token)
+              if count == 0:
+                  print('::error::处理完成但未生成任何有效记录')
+                  with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                      f.write('success=false\n')
+                      f.write('error=文件内容无法解析为有效的 mahjong1 数据，请检查 data 或 dt.si 字段\n')
+                  sys.exit(0)
+              with open('analysis_result.md', 'w', encoding='utf-8') as af:
+                  af.write(analysis_md)
+              summary_path = Path('mahjong1date') / date_dir / 'validation_summary.json'
+              validation_summary = json.loads(summary_path.read_text(encoding='utf-8')) if summary_path.exists() else {}
+              if validation_summary.get('has_errors'):
+                  first_issue = (validation_summary.get('issues') or [{}])[0]
+                  error_message = (
+                      f'Mahjong1 数据校验失败: {validation_summary.get("error_count", 0)} 个高危问题; '
+                      f'首个问题 {first_issue.get("file", "")} entry={first_issue.get("entry_index", "")} '
+                      f'sid={first_issue.get("sid", "")} {first_issue.get("code", "")}: {first_issue.get("message", "")}'
+                  )
+                  print(f'::error::{error_message}')
+                  with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                      f.write('success=false\n')
+                      f.write(f'error={error_message}\n')
+                  sys.exit(0)
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write(f'date_dir={date_dir}\n')
+                  f.write(f'url_file={url_file}\n')
+                  f.write(f'count={count}\n')
+                  f.write('success=true\n')
+          except Exception as e:
+              print(f'::error::处理失败: {e}')
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write('success=false\n')
+                  f.write(f'error=处理出错: {e}\n')
+          "
+
+      - name: Post error comment with format guide
+        if: steps.extract.outputs.found == 'true' && steps.process.outputs.success == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            printf '❌ **Mahjong1 数据处理失败**\n\n'
+            printf '**错误信息:** %s\n\n' "${{ steps.process.outputs.error }}"
+
+            if [ -f analysis_result.md ]; then
+              printf -- '---\n\n'
+              printf '## 数据校验摘要\n\n'
+              cat analysis_result.md
+              printf '\n'
+            fi
+
+            printf -- '---\n\n'
+            printf '请上传 `xxbet_capture_*.txt` 或 zip 文件。每行需要是 JSON 对象，spin 数据位于 `data` 或 `dt.si`。\n'
+          } > error_comment.md
+
+          gh issue comment ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --body-file error_comment.md
+
+      - name: Update README navigation
+        if: steps.extract.outputs.found == 'true' && steps.process.outputs.success == 'true'
+        run: python generate_nav.py
+
+      - name: Commit and push
+        if: steps.extract.outputs.found == 'true' && steps.process.outputs.success == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add mahjong1date/ README.md
+          git commit -m "Add mahjong1 data ${{ steps.process.outputs.date_dir }}"
+          git push
+
+      - name: Add label and comment with workflow guide
+        if: steps.extract.outputs.found == 'true' && steps.process.outputs.success == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create "待修复" --color "d73a4a" --description "等待开发修复" --repo ${{ github.repository }} 2>/dev/null || true
+          gh issue edit ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --add-label "待修复" || true
+
+          USED_TOKEN="${{ steps.extract.outputs.token }}"
+          if [ -z "$USED_TOKEN" ]; then
+            USED_TOKEN="436475c81b51e6893c740657870f86b7"
+            TOKEN_SOURCE="默认"
+          else
+            TOKEN_SOURCE="自定义"
+          fi
+
+          {
+            printf '✅ **Mahjong1 数据处理完成！** 共 %s 个回放文件。\n\n' "${{ steps.process.outputs.count }}"
+            printf '```\n'
+            cat "${{ steps.process.outputs.url_file }}"
+            printf '\n```\n\n---\n\n'
+            printf '## 数据分析摘要\n\n'
+            cat analysis_result.md 2>/dev/null || printf '_无分析数据_\n'
+            printf '\n\n---\n\n'
+            printf '当前使用的 token（%s）: `%s`\n\n' "$TOKEN_SOURCE" "$USED_TOKEN"
+            printf '链接使用 `debugDataPath` 读取整个批次目录；WebGL 会先加载 `manifest.json`，再按顺序读取 `001.json`、`002.json`。\n\n'
+            printf '生产入口基址：\n'
+            printf '```\n'
+            printf 'https://fish-games.s3.amazonaws.com/MahjongWays1/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=%s&language=en\n' "$USED_TOKEN"
+            printf '```\n'
+          } > comment_body.md
+
+          gh issue comment ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --body-file comment_body.md

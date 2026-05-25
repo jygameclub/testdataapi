@@ -13,6 +13,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # 游戏配置：(目录名, 显示名, 游戏基础URL用于识别)
 GAMES = [
+    ("mahjong1date", "Mahjong Ways 1"),
     ("mahjong2date", "Mahjong Ways 2"),
     ("tigerdate", "Fortune-Tiger"),
     ("oxdate", "Fortune-Ox"),

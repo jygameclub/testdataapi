@@ -2,7 +2,7 @@
 
 游戏测试数据自动处理工具，通过 GitHub Issue 上传数据文件，自动转换格式、生成调试链接。
 
-目前支持的游戏：**Anubis**、**Fortune-Ox**、**Fortune-Tiger**、**Mahjong Ways 2**
+目前支持的游戏：**Anubis**、**Fortune-Ox**、**Fortune-Tiger**、**Mahjong Ways 1**、**Mahjong Ways 2**
 
 ---
 
@@ -11,7 +11,7 @@
 只需 3 步即可完成数据处理：
 
 1. 在仓库中创建一个新 Issue
-2. **标题**中包含游戏关键词（`anubis` / `ox` / `tiger` / `mahjong2` / `麻将2` / `MahjongWays2`）
+2. **标题**中包含游戏关键词（`anubis` / `ox` / `tiger` / `mahjong1` / `麻将1` / `MahjongWays1` / `mahjong2` / `麻将2` / `MahjongWays2`）
 3. **正文**中拖入数据文件附件
 4. （可选）正文中添加 `token: 你的自定义token` 指定调试 token
 
@@ -36,6 +36,7 @@
 | Anubis | `anubis` | `上传 anubis 数据` |
 | Fortune-Ox | `ox` | `上传 ox 数据` |
 | Fortune-Tiger | `tiger` | `上传 tiger 数据` |
+| Mahjong Ways 1 | `mahjong1` / `麻将1` / `majianng1` / `MahjongWays1` | `上传 麻将1 数据` |
 | Mahjong Ways 2 | `mahjong2` / `麻将2` / `majianng2` / `MahjongWays2` | `上传 麻将2 数据` |
 
 ### 第三步：上传数据文件
@@ -49,6 +50,7 @@
 | Anubis | `.zip`（zip 内含多个 .txt 文件） |
 | Fortune-Ox | `.txt` 或 `.zip` |
 | Fortune-Tiger | `.txt` 或 `.zip` |
+| Mahjong Ways 1 | `.txt` 或 `.zip` |
 | Mahjong Ways 2 | `.txt` 或 `.zip` |
 
 ### 第四步：提交 Issue
@@ -62,7 +64,7 @@
 - **成功** — 评论中包含原始数据链接和游戏调试链接，可直接点击调试链接在浏览器中测试
 - **失败** — 评论中会说明错误原因和正确的数据格式说明
 - **未找到附件** — 提示正确的文件上传方式
-- **Mahjong2 格式咨询** — 在 Mahjong2 Issue 下回复 `这样的数据`，系统会返回支持格式、处理逻辑和 URL 参数说明
+- **Mahjong 格式咨询** — 在 Mahjong1/Mahjong2 Issue 下回复 `这样的数据`，系统会返回支持格式、处理逻辑和 URL 参数说明
 
 ### 第六步：Issue 状态流转
 
@@ -103,6 +105,11 @@ testdataapi/
 │   └── 0316_1200/       #   批次目录
 │       ├── data.txt
 │       └── url.txt
+├── mahjong1date/        # Mahjong Ways 1 按批次存放的回放结果
+│   └── 0525_0910/       #   批次目录
+│       ├── 001.json
+│       ├── manifest.json
+│       └── url.txt
 ├── mahjong2date/        # Mahjong Ways 2 按批次存放的回放结果
 │   └── 0525_0910/       #   批次目录
 │       ├── 001.json
@@ -112,6 +119,7 @@ testdataapi/
 ├── process_anubis_zip.py    # Anubis 数据处理核心
 ├── process_ox_txt.py        # Fortune-Ox 数据处理核心
 ├── process_tiger_txt.py     # Fortune-Tiger 数据处理核心
+├── process_mahjong1_txt.py  # Mahjong Ways 1 数据处理核心
 ├── process_mahjong2_txt.py  # Mahjong Ways 2 数据处理核心
 ├── convert_anubis.py        # Anubis 格式转换（独立使用）
 ├── convert_anubis0304.py    # Anubis 0304格式转换
@@ -120,6 +128,7 @@ testdataapi/
     ├── process-anubis.yml   # Anubis GitHub Actions
     ├── process-ox.yml       # Fortune-Ox GitHub Actions
     ├── process-tiger.yml    # Fortune-Tiger GitHub Actions
+    ├── process-mahjong1.yml # Mahjong Ways 1 GitHub Actions
     ├── process-mahjong2.yml # Mahjong Ways 2 GitHub Actions
     └── issue-lifecycle.yml  # Issue 状态流转自动化
 ```
@@ -234,6 +243,59 @@ python process_tiger_txt.py
 
 ---
 
+## Mahjong Ways 1
+
+### 支持的数据格式
+
+支持 `xxbet_capture_*.txt` 这类 JSONL 抓包文件，每行一个 JSON 对象。脚本会提取 `data` 或 `dt.si` 中的 spin 数据，并按 Mahjong1 的实际下注起点拆成 `001.json`、`002.json` 等回放文件：`st=1` 是新 bet，`st=4/21/22` 属于连消或免费旋转续转链。
+
+批次目录会额外生成 `manifest.json`，WebGL 可通过 `debugDataPath` 读取目录并按 manifest 顺序回放。
+
+### 上传方式
+
+#### 方式一：GitHub Issue（推荐）
+
+1. 在仓库创建新 Issue
+2. **标题**包含 `mahjong1` / `麻将1` / `majianng1` / `MahjongWays1`（如：`上传 麻将1 数据`）
+3. **正文**中拖入 `.txt` 或 `.zip` 附件
+4. 创建后 GitHub Actions 自动处理并返回链接
+5. 如果只是咨询格式，在 Issue 下回复 `这样的数据` 会自动返回支持格式说明
+
+#### 方式二：本地手动
+
+```bash
+# 指定文件处理
+python process_mahjong1_txt.py /path/to/xxbet_capture.txt
+
+# 或将 txt/zip 放入 update/ 目录，文件名以 mahjong1 开头
+python process_mahjong1_txt.py
+```
+
+### 输出结果
+
+处理后在 `mahjong1date/{MMDD_HHMM}/` 生成：
+
+- **数据文件** — `001.json`、`002.json`，默认每个文件是一轮扣费 bet 及其后续 cascade/continue 数据
+- **manifest.json** — 文件顺序与摘要，供 WebGL URL 回放读取
+- **validation_summary.json** — 机器可读校验结果，供 GitHub Actions 判断是否允许提交
+- **recommended_replays.csv** / **all_replays.csv** — 推荐回放与全量回放清单
+- **analysis.md** — 人可读分析，`majiangerrorcheck` 会优先列出高危数据问题
+- **url.txt** — 包含数据目录、manifest、调试链接和 CSV 下载链接
+
+### 重点测试说明
+
+`analysis.md` 会按 Mahjong1 的 30 格盘面与隐藏格规则自动生成测试说明：
+
+- Big Win：总赢 >= 17 倍下注
+- Mega Win：总赢 >= 35 倍下注
+- Super Mega Win：总赢 >= 50 倍下注
+- 连消/多段回放：同一 bet 内存在多个请求或 `st=4`
+- Scatter / Free Spin：`sc >= 3`、`st=21/22` 或 `fs` 中存在免费旋转状态
+- 金色符号/百搭转换：`ptbr`、`rs`、`rsc` 等字段有内容
+- 数据高危异常：`WP_WAYS_MISMATCH`、`NEXT_RL_RESTORE_MISMATCH`、`TRUNCATED_CONTINUE_STATE` 等会阻断提交，避免坏数据进入主回放目录
+
+---
+
 ## Mahjong Ways 2
 
 ### 支持的数据格式
@@ -290,7 +352,7 @@ python process_mahjong2_txt.py
 
 ## Anubis / Ox / Tiger 数据转换字段说明
 
-Anubis / Ox / Tiger 转换过程会从原始 spin 数据中提取 `si` 对象，并添加以下计算字段。Mahjong2 数据保持原始 spin 字段，只按 bet 拆分回放文件。
+Anubis / Ox / Tiger 转换过程会从原始 spin 数据中提取 `si` 对象，并添加以下计算字段。Mahjong1/Mahjong2 数据保持原始 spin 字段，只按 bet 拆分回放文件。
 
 | 字段 | 来源 | 说明 |
 |------|------|------|
