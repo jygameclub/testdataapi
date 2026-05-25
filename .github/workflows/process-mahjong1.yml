@@ -160,10 +160,16 @@ jobs:
                   with open('validation_error_summary.md', 'w', encoding='utf-8') as vf:
                       vf.write(build_validation_blocked_markdown(validation_summary))
                   first_issue = (validation_summary.get('issues') or [{}])[0]
+                  error_count = validation_summary.get('error_count', 0)
+                  first_file = first_issue.get('file', '')
+                  first_entry = first_issue.get('entry_index', '')
+                  first_sid = first_issue.get('sid', '')
+                  first_code = first_issue.get('code', '')
+                  first_message = first_issue.get('message', '')
                   error_message = (
-                      f'Mahjong1 数据校验失败: {validation_summary.get("error_count", 0)} 个高危问题; '
-                      f'首个问题 {first_issue.get("file", "")} entry={first_issue.get("entry_index", "")} '
-                      f'sid={first_issue.get("sid", "")} {first_issue.get("code", "")}: {first_issue.get("message", "")}'
+                      f'Mahjong1 数据校验失败: {error_count} 个高危问题; '
+                      f'首个问题 {first_file} entry={first_entry} '
+                      f'sid={first_sid} {first_code}: {first_message}'
                   )
                   print(f'::error::{error_message}')
                   with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
