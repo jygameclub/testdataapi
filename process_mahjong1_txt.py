@@ -356,44 +356,100 @@ def _possible_way_wins(rl: Any) -> dict[int, list[int]]:
 
 def _expected_next_rl(previous_record: dict[str, Any], next_record: dict[str, Any]) -> list[int] | None:
     previous_rl = previous_record.get("rl")
-    next_rs = next_record.get("rs")
-    rns = next_rs.get("rns") if isinstance(next_rs, dict) else None
     if not isinstance(previous_rl, list) or len(previous_rl) != BOARD_SIZE:
         return None
 
-    ssb_positions = set(_int_list(previous_record.get("ssb")))
-    ss_positions = set(_int_list(previous_record.get("ss")))
-    ptbr_positions = set(_int_list(previous_record.get("ptbr")))
+    next_rl = next_record.get("rl")
+    target_rl = next_rl if isinstance(next_rl, list) and len(next_rl) == BOARD_SIZE else None
     restored: list[int] = []
 
     for reel in range(REEL_COUNT):
-        start = reel * REEL_HEIGHT
-        reel_values = list(previous_rl[start:start + REEL_HEIGHT])
-
-        for position in ssb_positions:
-            if start <= position < start + REEL_HEIGHT and _is_active_position(position) and position not in ss_positions:
-                reel_values[position - start] = WILD_SYMBOL
-
-        removed_offsets = {
-            position - start
-            for position in ptbr_positions
-            if start <= position < start + REEL_HEIGHT
-            and _is_active_position(position)
-            and position not in ssb_positions
-        }
-        remaining_values = [
-            value
-            for offset, value in enumerate(reel_values)
-            if offset not in removed_offsets
-        ]
-        new_values = (
-            list(rns[reel])
-            if isinstance(rns, list) and reel < len(rns) and isinstance(rns[reel], list)
-            else []
+        target_values = (
+            list(target_rl[reel * REEL_HEIGHT:reel * REEL_HEIGHT + REEL_HEIGHT])
+            if target_rl is not None
+            else None
         )
-        restored.extend((new_values + remaining_values)[:REEL_HEIGHT])
+        restored.extend(_expected_next_reel_values(previous_record, next_record, reel, target_values))
 
     return restored
+
+
+def _expected_next_reel_values(
+    previous_record: dict[str, Any],
+    next_record: dict[str, Any],
+    reel: int,
+    target_values: list[Any] | None = None,
+) -> list[Any]:
+    previous_rl = previous_record.get("rl")
+    if not isinstance(previous_rl, list) or len(previous_rl) != BOARD_SIZE:
+        return []
+
+    start = reel * REEL_HEIGHT
+    reel_values = list(previous_rl[start:start + REEL_HEIGHT])
+    ssb_positions = set(_int_list(previous_record.get("ssb")))
+    ss_positions = set(_int_list(previous_record.get("ss")))
+    ptbr_positions = {
+        position
+        for position in _int_list(previous_record.get("ptbr"))
+        if start <= position < start + REEL_HEIGHT and _is_active_position(position)
+    }
+    forced_sticky_offsets = {
+        position - start
+        for position in ssb_positions
+        if start <= position < start + REEL_HEIGHT and _is_active_position(position) and position not in ss_positions
+    }
+    optional_sticky_offsets = sorted({
+        position - start
+        for position in ptbr_positions
+        if position - start not in forced_sticky_offsets
+    })
+    next_rs = next_record.get("rs")
+    rns = next_rs.get("rns") if isinstance(next_rs, dict) else None
+    new_values = (
+        list(rns[reel])
+        if isinstance(rns, list) and reel < len(rns) and isinstance(rns[reel], list)
+        else []
+    )
+
+    fallback = _rebuild_reel_values(reel_values, ptbr_positions, forced_sticky_offsets, set(), new_values, start)
+    for mask in range(1 << len(optional_sticky_offsets)):
+        sticky_offsets = {
+            optional_sticky_offsets[index]
+            for index in range(len(optional_sticky_offsets))
+            if mask & (1 << index)
+        }
+        candidate = _rebuild_reel_values(reel_values, ptbr_positions, forced_sticky_offsets, sticky_offsets, new_values, start)
+        if target_values is not None and candidate == target_values:
+            return candidate
+
+    return fallback
+
+
+def _rebuild_reel_values(
+    reel_values: list[Any],
+    ptbr_positions: set[int],
+    forced_sticky_offsets: set[int],
+    optional_sticky_offsets: set[int],
+    new_values: list[Any],
+    start: int,
+) -> list[Any]:
+    values = list(reel_values)
+    sticky_offsets = forced_sticky_offsets | optional_sticky_offsets
+    for offset in sticky_offsets:
+        if 0 <= offset < len(values):
+            values[offset] = WILD_SYMBOL
+
+    removed_offsets = {
+        position - start
+        for position in ptbr_positions
+        if position - start not in sticky_offsets
+    }
+    remaining_values = [
+        value
+        for offset, value in enumerate(values)
+        if offset not in removed_offsets
+    ]
+    return (new_values + remaining_values)[:REEL_HEIGHT]
 
 
 def _debug_link_for_start(github_path: str, replay_start: int, token: str | None) -> str:
@@ -635,32 +691,33 @@ def _validate_record_transition(
     if not _record_has_win(previous_record):
         return []
 
+    expected_rl = _expected_next_rl(previous_record, next_record)
+    next_rl = next_record.get("rl")
+    if expected_rl is not None and isinstance(next_rl, list) and len(next_rl) == BOARD_SIZE and expected_rl == next_rl:
+        return []
+
     expected_by_reel: dict[int, list[int]] = {}
     for position in _non_gold_drop_positions(previous_record):
         expected_by_reel.setdefault(_reel_index(position), []).append(position)
 
-    if not expected_by_reel:
-        return []
-
     rs = next_record.get("rs")
     rns = rs.get("rns") if isinstance(rs, dict) else None
     issues: list[dict[str, Any]] = []
-    for reel, positions in sorted(expected_by_reel.items()):
-        actual_items = rns[reel] if isinstance(rns, list) and reel < len(rns) and isinstance(rns[reel], list) else []
-        if len(actual_items) < len(positions):
-            issues.append(_majiang_issue(
-                file_name,
-                replay_start,
-                github_path,
-                token,
-                previous_entry_index + 1,
-                next_record,
-                "RNS_DROP_MISMATCH",
-                f"上一条ptbr普通消除位置{positions}需要第{reel + 1}列补{len(positions)}个，当前rs.rns[{reel}]={actual_items}，补牌数量不足",
-            ))
+    if expected_by_reel:
+        for reel, positions in sorted(expected_by_reel.items()):
+            actual_items = rns[reel] if isinstance(rns, list) and reel < len(rns) and isinstance(rns[reel], list) else []
+            if len(actual_items) < len(positions):
+                issues.append(_majiang_issue(
+                    file_name,
+                    replay_start,
+                    github_path,
+                    token,
+                    previous_entry_index + 1,
+                    next_record,
+                    "RNS_DROP_MISMATCH",
+                    f"上一条ptbr普通消除位置{positions}需要第{reel + 1}列补{len(positions)}个，当前rs.rns[{reel}]={actual_items}，补牌数量不足",
+                ))
 
-    expected_rl = _expected_next_rl(previous_record, next_record)
-    next_rl = next_record.get("rl")
     if expected_rl is not None and isinstance(next_rl, list) and len(next_rl) == BOARD_SIZE and expected_rl != next_rl:
         mismatches = [
             f"{index}:expected={expected},actual={actual}"

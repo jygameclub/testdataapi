@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from process_mahjong1_txt import (
+    _validate_record_transition,
     analyze_replay_dir,
     build_validation_blocked_markdown,
     build_url_lines,
@@ -168,6 +169,30 @@ class Mahjong1ProcessTests(unittest.TestCase):
         self.assertIn("已阻断提交", markdown)
         self.assertNotIn("https://raw.githubusercontent.com/jygameclub/testdataapi/main/mahjong1date/0525_0759", markdown)
         self.assertNotIn("debugDataPath=https://raw.githubusercontent.com", markdown)
+
+    def test_transition_allows_ptbr_symbols_to_stick_as_wild(self):
+        previous_record = _full_record("900", st=1)
+        previous_record["iswin"] = 1
+        previous_record["ptbr"] = [7, 10]
+        previous_record["wp"] = {"3": [7, 10]}
+        previous_record["lw"] = {"3": 20.0}
+        next_record = _full_record("901", st=4, psid="900")
+        next_record["rs"] = {"rns": [[], [], [], [], []]}
+        next_record["rl"] = list(previous_record["rl"])
+        next_record["rl"][7] = 0
+        next_record["rl"][10] = 0
+
+        issues = _validate_record_transition(
+            "001.json",
+            1,
+            "mahjong1date/test_batch",
+            None,
+            0,
+            previous_record,
+            next_record,
+        )
+
+        self.assertEqual([], issues)
 
 
 def _record(sid: str, st: int = 1, win: float = 0, psid: str | None = None) -> dict:
