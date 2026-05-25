@@ -36,6 +36,7 @@ SCATTER_SYMBOL = 1
 HIDDEN_INDEXES = {0, 5, 6, 7, 13, 14, 20, 21, 27, 28, 33, 34}
 RECOMMENDED_CSV_FILE = "recommended_replays.csv"
 ALL_REPLAYS_CSV_FILE = "all_replays.csv"
+VALIDATION_SUMMARY_FILE = "validation_summary.json"
 ANALYSIS_TABLE_HEADER = "| 文件 | 特征标签 | 回放链接 | 类型 | 总赢 | 倍率 | 请求数 | 中奖线 | Scatter | 起始SID | 结束SID | 为什么要测 |"
 ANALYSIS_TABLE_DIVIDER = "|------|----------|----------|------|------|------|--------|--------|---------|---------|---------|------------|"
 CSV_COLUMNS = [
@@ -349,6 +350,48 @@ def _possible_way_wins(rl: Any) -> dict[int, list[int]]:
     return wins
 
 
+def _expected_next_rl(previous_record: dict[str, Any], next_record: dict[str, Any]) -> list[int] | None:
+    previous_rl = previous_record.get("rl")
+    next_rs = next_record.get("rs")
+    rns = next_rs.get("rns") if isinstance(next_rs, dict) else None
+    if not isinstance(previous_rl, list) or len(previous_rl) != BOARD_SIZE:
+        return None
+
+    ssb_positions = set(_int_list(previous_record.get("ssb")))
+    ss_positions = set(_int_list(previous_record.get("ss")))
+    ptbr_positions = set(_int_list(previous_record.get("ptbr")))
+    restored: list[int] = []
+
+    for reel in range(REEL_COUNT):
+        start = reel * REEL_HEIGHT
+        reel_values = list(previous_rl[start:start + REEL_HEIGHT])
+
+        for position in ssb_positions:
+            if start <= position < start + REEL_HEIGHT and _is_active_position(position) and position not in ss_positions:
+                reel_values[position - start] = WILD_SYMBOL
+
+        removed_offsets = {
+            position - start
+            for position in ptbr_positions
+            if start <= position < start + REEL_HEIGHT
+            and _is_active_position(position)
+            and position not in ssb_positions
+        }
+        remaining_values = [
+            value
+            for offset, value in enumerate(reel_values)
+            if offset not in removed_offsets
+        ]
+        new_values = (
+            list(rns[reel])
+            if isinstance(rns, list) and reel < len(rns) and isinstance(rns[reel], list)
+            else []
+        )
+        restored.extend((new_values + remaining_values)[:REEL_HEIGHT])
+
+    return restored
+
+
 def _debug_link_for_start(github_path: str, replay_start: int, token: str | None) -> str:
     return _with_query_params(
         _game_url_base(token),
@@ -524,6 +567,21 @@ def _validate_record_shape(
             ))
 
     possible_wins = _possible_way_wins(rl)
+    for symbol, positions in wp_positions.items():
+        actual_positions = set(positions)
+        expected_positions = set(possible_wins.get(symbol, []))
+        if actual_positions != expected_positions:
+            issues.append(_majiang_issue(
+                file_name,
+                replay_start,
+                github_path,
+                token,
+                entry_index,
+                record,
+                "WP_WAYS_MISMATCH",
+                f"wp[{symbol}]和当前盘面Ways结果不一致：actual={sorted(actual_positions)}，expected={sorted(expected_positions)}",
+            ))
+
     server_round_ended = _float_value(record.get("nst")) not in (4, 21, 22)
     if not _record_has_win(record) and server_round_ended and possible_wins:
         first_symbol, first_positions = next(iter(possible_wins.items()))
@@ -598,6 +656,25 @@ def _validate_record_transition(
                 f"上一条ptbr普通消除位置{positions}需要第{reel + 1}列补{len(positions)}个，当前rs.rns[{reel}]={actual_items}，补牌数量不足",
             ))
 
+    expected_rl = _expected_next_rl(previous_record, next_record)
+    next_rl = next_record.get("rl")
+    if expected_rl is not None and isinstance(next_rl, list) and len(next_rl) == BOARD_SIZE and expected_rl != next_rl:
+        mismatches = [
+            f"{index}:expected={expected},actual={actual}"
+            for index, (expected, actual) in enumerate(zip(expected_rl, next_rl))
+            if expected != actual
+        ]
+        issues.append(_majiang_issue(
+            file_name,
+            replay_start,
+            github_path,
+            token,
+            previous_entry_index + 1,
+            next_record,
+            "NEXT_RL_RESTORE_MISMATCH",
+            f"previous entry {previous_entry_index} + previous ptbr/ssb/ss + current rs.rns无法精确还原当前rl，mismatches={mismatches[:12]}，total={len(mismatches)}",
+        ))
+
     return issues
 
 
@@ -621,7 +698,72 @@ def _majiang_error_checks_for_records(
                 records[index - 2],
                 record,
             ))
+    if records:
+        last_record = records[-1]
+        if _float_value(last_record.get("nst")) in (4, 21, 22):
+            issues.append(_majiang_issue(
+                file_name,
+                replay_start,
+                github_path,
+                token,
+                len(records),
+                last_record,
+                "TRUNCATED_CONTINUE_STATE",
+                f"bet文件最后一条仍是继续状态nst={last_record.get('nst')}，但当前文件没有下一条数据",
+            ))
     return issues
+
+
+def _replay_json_paths(replay_dir: Path) -> list[Path]:
+    return [
+        path
+        for path in sorted(replay_dir.glob("*.json"))
+        if path.name != "manifest.json"
+    ]
+
+
+def _majiang_error_checks_for_replay_dir(
+    replay_dir: Path,
+    github_path: str,
+    token: str | None,
+    replay_paths: list[Path] | None = None,
+    replay_start_lookup: dict[int, int] | None = None,
+) -> list[dict[str, Any]]:
+    paths = replay_paths if replay_paths is not None else _replay_json_paths(replay_dir)
+    start_lookup = (
+        replay_start_lookup
+        if replay_start_lookup is not None
+        else _build_replay_start_index_lookup(paths)
+    )
+    issues: list[dict[str, Any]] = []
+    for path in paths:
+        file_index = _file_index(path)
+        replay_start = start_lookup.get(file_index, file_index)
+        issues.extend(_majiang_error_checks_for_records(
+            path.name,
+            _records_from_file(path),
+            github_path,
+            token,
+            replay_start,
+        ))
+    return issues
+
+
+def _validation_summary(issues: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "has_errors": bool(issues),
+        "error_count": len(issues),
+        "max_severity": "高危" if issues else "",
+        "issues": issues,
+    }
+
+
+def write_validation_summary_file(output_dir: Path | str, github_path: str, token: str | None = None) -> Path:
+    replay_dir = Path(output_dir)
+    issues = _majiang_error_checks_for_replay_dir(replay_dir, github_path, token)
+    summary_path = replay_dir / VALIDATION_SUMMARY_FILE
+    _write_json(summary_path, _validation_summary(issues))
+    return summary_path
 
 
 def _majiang_error_section(issues: list[dict[str, Any]]) -> list[str]:
@@ -1072,11 +1214,7 @@ def write_replay_csv_files(
 
 def analyze_replay_dir(output_dir: Path | str, github_path: str, token: str | None = None) -> str:
     replay_dir = Path(output_dir)
-    replay_paths = [
-        path
-        for path in sorted(replay_dir.glob("*.json"))
-        if path.name != "manifest.json"
-    ]
+    replay_paths = _replay_json_paths(replay_dir)
     replay_start_lookup = _build_replay_start_index_lookup(replay_paths)
     summaries = [
         _summarize_replay_file(
@@ -1087,17 +1225,13 @@ def analyze_replay_dir(output_dir: Path | str, github_path: str, token: str | No
         )
         for path in replay_paths
     ]
-    majiang_issues: list[dict[str, Any]] = []
-    for path in replay_paths:
-        file_index = _file_index(path)
-        replay_start = replay_start_lookup.get(file_index, file_index)
-        majiang_issues.extend(_majiang_error_checks_for_records(
-            path.name,
-            _records_from_file(path),
-            github_path,
-            token,
-            replay_start,
-        ))
+    majiang_issues = _majiang_error_checks_for_replay_dir(
+        replay_dir,
+        github_path,
+        token,
+        replay_paths=replay_paths,
+        replay_start_lookup=replay_start_lookup,
+    )
 
     total_files = len(summaries)
     winning = [item for item in summaries if item["total_win"] > 0]
@@ -1278,6 +1412,7 @@ def process_txt(
     write_replay_csv_files(output_dir, github_path, token=token)
     url_file = _write_url_file(output_dir, github_path, token=token)
     analysis = _write_analysis_file(output_dir, github_path, token=token)
+    write_validation_summary_file(output_dir, github_path, token=token)
 
     print(
         "[process_mahjong2] "

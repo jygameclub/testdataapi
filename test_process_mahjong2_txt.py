@@ -292,6 +292,88 @@ class Mahjong2ProcessTests(unittest.TestCase):
             self.assertIn("wp[4]", analysis)
             self.assertIn("盘面符号=7", analysis)
 
+    def test_analysis_flags_wp_that_is_not_exact_ways_position_set(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out"
+            output.mkdir()
+            record = _full_record("500", st=1, nst=4)
+            record["wp"] = {"4": [1, 8, 15]}
+            record["ptbr"] = [1, 8, 15]
+            record["rl"][1] = 4
+            record["rl"][2] = 4
+            record["rl"][8] = 4
+            for position in [15, 16, 17, 18, 19]:
+                record["rl"][position] = 5
+            record["rl"][15] = 4
+            _write_json(output / "001.json", [record])
+
+            analysis = analyze_replay_dir(output, "mahjong2date/test_batch")
+
+            self.assertIn("WP_WAYS_MISMATCH", analysis)
+            self.assertIn("expected=[1, 2, 8, 15]", analysis)
+
+    def test_analysis_flags_next_rl_that_cannot_be_restored_from_previous_cascade(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out"
+            output.mkdir()
+            first = _full_record("600", st=1, nst=4)
+            for position in [1, 2, 3, 4]:
+                first["rl"][position] = 2
+            for position in [8, 9, 10, 11, 12]:
+                first["rl"][position] = 3
+            for position in [15, 16, 17, 18, 19]:
+                first["rl"][position] = 5
+            first["rl"][1] = 4
+            first["rl"][8] = 4
+            first["rl"][15] = 4
+            first["wp"] = {"4": [1, 8, 15]}
+            first["ptbr"] = [1, 8, 15]
+            second = _full_record("601", st=4, nst=1, psid="600")
+            second["rs"] = {"rns": [[9], [9], [9], [], []]}
+            _write_json(output / "001.json", [first, second])
+
+            analysis = analyze_replay_dir(output, "mahjong2date/test_batch")
+
+            self.assertIn("NEXT_RL_RESTORE_MISMATCH", analysis)
+            self.assertIn("previous entry 1", analysis)
+
+    def test_analysis_flags_last_entry_with_continue_state_as_truncated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out"
+            output.mkdir()
+            record = _full_record("700", st=1, nst=4)
+            _write_json(output / "001.json", [record])
+
+            analysis = analyze_replay_dir(output, "mahjong2date/test_batch")
+
+            self.assertIn("TRUNCATED_CONTINUE_STATE", analysis)
+            self.assertIn("nst=4", analysis)
+
+    def test_process_txt_writes_machine_readable_validation_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "mahjong2_upload.txt"
+            batch = "unit_validation_summary_test"
+            output = Path(__file__).resolve().parent / "mahjong2date" / batch
+            record = _full_record("800", st=1, nst=4)
+            record["wp"] = {"4": [1, 8, 15]}
+            record["ptbr"] = [1, 8, 15]
+            record["rl"][1] = 4
+            record["rl"][8] = 4
+            record["rl"][15] = 7
+            source.write_text(json.dumps({"data": record}) + "\n", encoding="utf-8")
+            shutil.rmtree(output, ignore_errors=True)
+
+            try:
+                process_txt(source, token="custom-token", date_dir_name=batch)
+
+                summary = json.loads((output / "validation_summary.json").read_text(encoding="utf-8"))
+                self.assertTrue(summary["has_errors"])
+                self.assertGreaterEqual(summary["error_count"], 1)
+                self.assertEqual(summary["max_severity"], "高危")
+                self.assertEqual(summary["issues"][0]["code"], "WP_BOARD_MISMATCH")
+            finally:
+                shutil.rmtree(output, ignore_errors=True)
+
     def test_analysis_does_not_flag_hidden_ss_or_ssb_as_error(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "out"

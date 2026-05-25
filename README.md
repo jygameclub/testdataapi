@@ -268,6 +268,7 @@ python process_mahjong2_txt.py
 
 - **数据文件** — `001.json`、`002.json`，默认每个文件是一轮扣费 bet 及其后续 cascade/continue 数据
 - **manifest.json** — 文件顺序与摘要，供 WebGL URL 回放读取
+- **validation_summary.json** — 机器可读校验结果，供 GitHub Actions 判断是否允许提交
 - **url.txt** — 包含：
   - 数据目录基址：`https://raw.githubusercontent.com/jygameclub/testdataapi/main/mahjong2date/{批次}`
   - manifest 链接：`https://raw.githubusercontent.com/jygameclub/testdataapi/main/mahjong2date/{批次}/manifest.json`
@@ -283,6 +284,7 @@ python process_mahjong2_txt.py
 - 连消/多段回放：同一 bet 内存在多个请求或 `st/nst=4`
 - Scatter / Free Spin：`sc >= 3` 或 `fs` 中存在免费旋转状态
 - 金色符号/百搭转换：`ptbr`、`rs`、`rsc` 等字段有内容
+- 数据高危异常：`majiangerrorcheck` 会优先列出 `wp/ptbr/rl/rs.rns` 等客户端表现风险；GitHub Actions 会阻断这类批次提交，避免坏数据进入主回放目录
 
 ---
 

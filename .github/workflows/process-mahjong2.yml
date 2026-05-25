@@ -140,6 +140,8 @@ jobs:
           python -c "
           import os
           import sys
+          import json
+          from pathlib import Path
           try:
               from process_mahjong2_txt import process_file
               token = os.environ.get('CUSTOM_TOKEN') or None
@@ -152,6 +154,20 @@ jobs:
                   sys.exit(0)
               with open('analysis_result.md', 'w', encoding='utf-8') as af:
                   af.write(analysis_md)
+              summary_path = Path('mahjong2date') / date_dir / 'validation_summary.json'
+              validation_summary = json.loads(summary_path.read_text(encoding='utf-8')) if summary_path.exists() else {}
+              if validation_summary.get('has_errors'):
+                  first_issue = (validation_summary.get('issues') or [{}])[0]
+                  error_message = (
+                      f'Mahjong2 数据校验失败: {validation_summary.get("error_count", 0)} 个高危问题; '
+                      f'首个问题 {first_issue.get("file", "")} entry={first_issue.get("entry_index", "")} '
+                      f'sid={first_issue.get("sid", "")} {first_issue.get("code", "")}: {first_issue.get("message", "")}'
+                  )
+                  print(f'::error::{error_message}')
+                  with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                      f.write('success=false\n')
+                      f.write(f'error={error_message}\n')
+                  sys.exit(0)
               with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
                   f.write(f'date_dir={date_dir}\n')
                   f.write(f'url_file={url_file}\n')
@@ -169,13 +185,24 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          {
+            printf '❌ **Mahjong2 数据处理失败**\n\n'
+            printf '**错误信息:** %s\n\n' "${{ steps.process.outputs.error }}"
+
+            if [ -f analysis_result.md ]; then
+              printf -- '---\n\n'
+              printf '## 数据校验摘要\n\n'
+              cat analysis_result.md
+              printf '\n'
+            fi
+
+            printf -- '---\n\n'
+            printf '请上传 `xxbet_capture_*.txt` 或 zip 文件。每行需要是 JSON 对象，spin 数据位于 `data` 或 `dt.si`。\n'
+          } > error_comment.md
+
           gh issue comment ${{ github.event.issue.number }} \
             --repo ${{ github.repository }} \
-            --body "❌ **Mahjong2 数据处理失败**
-
-          **错误信息:** ${{ steps.process.outputs.error }}
-
-          请上传 \`xxbet_capture_*.txt\` 或 zip 文件。每行需要是 JSON 对象，spin 数据位于 \`data\` 或 \`dt.si\`。"
+            --body-file error_comment.md
 
       - name: Update README navigation
         if: steps.extract.outputs.found == 'true' && steps.process.outputs.success == 'true'
