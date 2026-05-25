@@ -27,6 +27,12 @@ BIG_WIN_MULTIPLIER = 17
 MEGA_WIN_MULTIPLIER = 35
 SUPER_MEGA_WIN_MULTIPLIER = 50
 FREE_SPIN_SCATTER_COUNT = 3
+REEL_COUNT = 5
+REEL_HEIGHT = 7
+BOARD_SIZE = REEL_COUNT * REEL_HEIGHT
+WILD_SYMBOL = 0
+SCATTER_SYMBOL = 1
+HIDDEN_INDEXES = {0, 5, 6, 7, 13, 14, 20, 21, 27, 28, 33, 34}
 MAHJONG2_TITLE_ALIASES = (
     "mahjong2",
     "mahjongways2",
@@ -196,6 +202,399 @@ def _records_from_file(path: Path) -> list[dict[str, Any]]:
 def _count_win_lines(record: dict[str, Any]) -> int:
     wp = record.get("wp")
     return len(wp) if isinstance(wp, dict) else 0
+
+
+def _int_value(value: Any, default: int | None = None) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _int_list(value: Any) -> list[int]:
+    if not isinstance(value, list):
+        return []
+
+    result: list[int] = []
+    for item in value:
+        int_item = _int_value(item)
+        if int_item is not None:
+            result.append(int_item)
+    return result
+
+
+def _wp_positions(record: dict[str, Any]) -> dict[int, list[int]]:
+    wp = record.get("wp")
+    if not isinstance(wp, dict):
+        return {}
+
+    result: dict[int, list[int]] = {}
+    for symbol, positions in wp.items():
+        symbol_index = _int_value(symbol)
+        if symbol_index is None:
+            continue
+        result[symbol_index] = _int_list(positions)
+    return result
+
+
+def _is_active_position(position: int) -> bool:
+    return 0 <= position < BOARD_SIZE and position not in HIDDEN_INDEXES
+
+
+def _reel_index(position: int) -> int:
+    return position // REEL_HEIGHT
+
+
+def _active_positions_for_reel(reel: int) -> list[int]:
+    start = reel * REEL_HEIGHT
+    return [
+        position
+        for position in range(start, start + REEL_HEIGHT)
+        if _is_active_position(position)
+    ]
+
+
+def _record_has_win(record: dict[str, Any]) -> bool:
+    return bool(_wp_positions(record))
+
+
+def _possible_way_wins(rl: Any) -> dict[int, list[int]]:
+    if not isinstance(rl, list) or len(rl) < BOARD_SIZE:
+        return {}
+
+    symbols = sorted({
+        _int_value(rl[position])
+        for position in range(BOARD_SIZE)
+        if _is_active_position(position)
+        and _int_value(rl[position]) not in (None, WILD_SYMBOL, SCATTER_SYMBOL)
+    })
+    wins: dict[int, list[int]] = {}
+
+    for symbol in symbols:
+        if symbol is None:
+            continue
+
+        positions: list[int] = []
+        consecutive_reels = 0
+        for reel in range(REEL_COUNT):
+            reel_matches = [
+                position
+                for position in _active_positions_for_reel(reel)
+                if _int_value(rl[position]) in (symbol, WILD_SYMBOL)
+            ]
+            if not reel_matches:
+                break
+            consecutive_reels += 1
+            positions.extend(reel_matches)
+
+        if consecutive_reels >= 3:
+            wins[symbol] = positions
+
+    return wins
+
+
+def _debug_link_for_start(github_path: str, replay_start: int, token: str | None) -> str:
+    return _with_query_params(
+        _game_url_base(token),
+        {
+            "debugDataPath": f"{GITHUB_RAW_BASE}/{github_path.strip('/')}",
+            "debugStart": replay_start,
+        },
+    )
+
+
+def _markdown_cell(value: Any) -> str:
+    return str(value).replace("\n", " ").replace("|", "\\|")
+
+
+def _majiang_issue(
+    file_name: str,
+    replay_start: int,
+    github_path: str,
+    token: str | None,
+    entry_index: int,
+    record: dict[str, Any],
+    code: str,
+    message: str,
+    severity: str = "高危",
+) -> dict[str, Any]:
+    return {
+        "file": file_name,
+        "entry_index": entry_index,
+        "sid": record.get("sid", ""),
+        "severity": severity,
+        "code": code,
+        "message": message,
+        "debug_link": _debug_link_for_start(github_path, replay_start, token),
+        "replay_start_index": replay_start,
+    }
+
+
+def _validate_record_shape(
+    file_name: str,
+    replay_start: int,
+    github_path: str,
+    token: str | None,
+    entry_index: int,
+    record: dict[str, Any],
+) -> list[dict[str, Any]]:
+    issues: list[dict[str, Any]] = []
+    rl = record.get("rl")
+
+    if not isinstance(rl, list) or len(rl) != BOARD_SIZE:
+        issues.append(_majiang_issue(
+            file_name,
+            replay_start,
+            github_path,
+            token,
+            entry_index,
+            record,
+            "RL_LENGTH",
+            f"rl长度应为{BOARD_SIZE}，当前={len(rl) if isinstance(rl, list) else 'null'}，客户端盘面可能无法和服务端数据对齐",
+        ))
+        return issues
+
+    position_fields = {
+        "ptbr": _int_list(record.get("ptbr")),
+        "ssb": _int_list(record.get("ssb")),
+        "ss": _int_list(record.get("ss")),
+    }
+    for field_name, positions in position_fields.items():
+        for position in positions:
+            if position < 0 or position >= BOARD_SIZE:
+                issues.append(_majiang_issue(
+                    file_name,
+                    replay_start,
+                    github_path,
+                    token,
+                    entry_index,
+                    record,
+                    "POSITION_RANGE",
+                    f"{field_name}包含越界位置{position}，有效范围是0-{BOARD_SIZE - 1}",
+                ))
+            elif position in HIDDEN_INDEXES:
+                issues.append(_majiang_issue(
+                    file_name,
+                    replay_start,
+                    github_path,
+                    token,
+                    entry_index,
+                    record,
+                    "HIDDEN_POSITION",
+                    f"{field_name}包含隐藏格位置{position}，客户端不会把这个格子当作普通可消除盘面",
+                ))
+
+    wp_positions = _wp_positions(record)
+    union_wp_positions: set[int] = set()
+    for symbol, positions in wp_positions.items():
+        union_wp_positions.update(positions)
+        for position in positions:
+            if position < 0 or position >= BOARD_SIZE:
+                issues.append(_majiang_issue(
+                    file_name,
+                    replay_start,
+                    github_path,
+                    token,
+                    entry_index,
+                    record,
+                    "WP_POSITION_RANGE",
+                    f"wp[{symbol}]包含越界位置{position}，有效范围是0-{BOARD_SIZE - 1}",
+                ))
+                continue
+            if position in HIDDEN_INDEXES:
+                issues.append(_majiang_issue(
+                    file_name,
+                    replay_start,
+                    github_path,
+                    token,
+                    entry_index,
+                    record,
+                    "WP_HIDDEN_POSITION",
+                    f"wp[{symbol}]包含隐藏格位置{position}，客户端普通消除不会按可见格处理",
+                ))
+                continue
+
+            board_symbol = _int_value(rl[position])
+            if board_symbol not in (symbol, WILD_SYMBOL):
+                issues.append(_majiang_issue(
+                    file_name,
+                    replay_start,
+                    github_path,
+                    token,
+                    entry_index,
+                    record,
+                    "WP_BOARD_MISMATCH",
+                    f"wp[{symbol}]位置{position}和当前盘面不一致：盘面符号={board_symbol}，期望={symbol}或Wild({WILD_SYMBOL})",
+                ))
+
+    ptbr_positions = set(_int_list(record.get("ptbr")))
+    if wp_positions:
+        missing_from_ptbr = sorted(union_wp_positions - ptbr_positions)
+        extra_in_ptbr = sorted(ptbr_positions - union_wp_positions)
+        if missing_from_ptbr:
+            issues.append(_majiang_issue(
+                file_name,
+                replay_start,
+                github_path,
+                token,
+                entry_index,
+                record,
+                "WP_NOT_IN_PTBR",
+                f"wp中奖位置没有全部出现在ptbr中，缺少={missing_from_ptbr}，客户端消除会少消",
+            ))
+        if extra_in_ptbr:
+            issues.append(_majiang_issue(
+                file_name,
+                replay_start,
+                github_path,
+                token,
+                entry_index,
+                record,
+                "PTBR_NOT_IN_WP",
+                f"ptbr包含不在wp中的位置={extra_in_ptbr}，客户端可能多消除普通麻将",
+            ))
+    else:
+        visible_ptbr = sorted(position for position in ptbr_positions if _is_active_position(position))
+        if visible_ptbr:
+            issues.append(_majiang_issue(
+                file_name,
+                replay_start,
+                github_path,
+                token,
+                entry_index,
+                record,
+                "PTBR_WITHOUT_WP",
+                f"服务端没有wp中奖连接，但ptbr包含可见消除位置={visible_ptbr}",
+            ))
+
+    possible_wins = _possible_way_wins(rl)
+    server_round_ended = _float_value(record.get("nst")) not in (4, 21, 22)
+    if not _record_has_win(record) and server_round_ended and possible_wins:
+        first_symbol, first_positions = next(iter(possible_wins.items()))
+        issues.append(_majiang_issue(
+            file_name,
+            replay_start,
+            github_path,
+            token,
+            entry_index,
+            record,
+            "FINAL_BOARD_STILL_WIN",
+            f"服务端已结束但盘面仍可中奖：symbol={first_symbol}, positions={first_positions}",
+        ))
+
+    if _record_has_win(record) and not possible_wins:
+        issues.append(_majiang_issue(
+            file_name,
+            replay_start,
+            github_path,
+            token,
+            entry_index,
+            record,
+            "WP_WITHOUT_BOARD_WIN",
+            "服务端给了wp中奖，但按当前rl盘面没有检测到从第1列开始的Ways中奖",
+        ))
+
+    return issues
+
+
+def _non_gold_drop_positions(record: dict[str, Any]) -> list[int]:
+    ssb = set(_int_list(record.get("ssb")))
+    positions: list[int] = []
+    for position in _int_list(record.get("ptbr")):
+        if _is_active_position(position) and position not in ssb:
+            positions.append(position)
+    return positions
+
+
+def _validate_record_transition(
+    file_name: str,
+    replay_start: int,
+    github_path: str,
+    token: str | None,
+    previous_entry_index: int,
+    previous_record: dict[str, Any],
+    next_record: dict[str, Any],
+) -> list[dict[str, Any]]:
+    if not _record_has_win(previous_record):
+        return []
+
+    expected_by_reel: dict[int, list[int]] = {}
+    for position in _non_gold_drop_positions(previous_record):
+        expected_by_reel.setdefault(_reel_index(position), []).append(position)
+
+    if not expected_by_reel:
+        return []
+
+    rs = next_record.get("rs")
+    rns = rs.get("rns") if isinstance(rs, dict) else None
+    issues: list[dict[str, Any]] = []
+    for reel, positions in sorted(expected_by_reel.items()):
+        actual_items = rns[reel] if isinstance(rns, list) and reel < len(rns) and isinstance(rns[reel], list) else []
+        if len(actual_items) < len(positions):
+            issues.append(_majiang_issue(
+                file_name,
+                replay_start,
+                github_path,
+                token,
+                previous_entry_index + 1,
+                next_record,
+                "RNS_DROP_MISMATCH",
+                f"上一条ptbr普通消除位置{positions}需要第{reel + 1}列补{len(positions)}个，当前rs.rns[{reel}]={actual_items}，补牌数量不足",
+            ))
+
+    return issues
+
+
+def _majiang_error_checks_for_records(
+    file_name: str,
+    records: list[dict[str, Any]],
+    github_path: str,
+    token: str | None,
+    replay_start: int,
+) -> list[dict[str, Any]]:
+    issues: list[dict[str, Any]] = []
+    for index, record in enumerate(records, 1):
+        issues.extend(_validate_record_shape(file_name, replay_start, github_path, token, index, record))
+        if index > 1:
+            issues.extend(_validate_record_transition(
+                file_name,
+                replay_start,
+                github_path,
+                token,
+                index - 1,
+                records[index - 2],
+                record,
+            ))
+    return issues
+
+
+def _majiang_error_section(issues: list[dict[str, Any]]) -> list[str]:
+    if not issues:
+        return []
+
+    lines = [
+        "",
+        "### majiangerrorcheck 数据异常优先检查",
+        "",
+        "| 文件 | 回放链接 | 严重度 | 位置/SID | 类型 | 说明 |",
+        "|------|----------|--------|----------|------|------|",
+    ]
+    for issue in issues:
+        location = f"entry={issue['entry_index']}, sid={issue['sid']}"
+        message = f"majiangerrorcheck {issue['code']}: {issue['message']}"
+        lines.append(
+            "| "
+            + " | ".join([
+                _markdown_cell(issue["file"]),
+                _link(f"从第{issue['replay_start_index']}次开始", issue["debug_link"]),
+                _markdown_cell(issue["severity"]),
+                _markdown_cell(location),
+                _markdown_cell(issue["code"]),
+                _markdown_cell(message),
+            ])
+            + " |"
+        )
+    return lines
 
 
 def _final_win(records: list[dict[str, Any]]) -> float:
@@ -422,6 +821,17 @@ def analyze_replay_dir(output_dir: Path | str, github_path: str, token: str | No
         )
         for path in replay_paths
     ]
+    majiang_issues: list[dict[str, Any]] = []
+    for path in replay_paths:
+        file_index = _file_index(path)
+        replay_start = replay_start_lookup.get(file_index, file_index)
+        majiang_issues.extend(_majiang_error_checks_for_records(
+            path.name,
+            _records_from_file(path),
+            github_path,
+            token,
+            replay_start,
+        ))
 
     total_files = len(summaries)
     winning = [item for item in summaries if item["total_win"] > 0]
@@ -447,6 +857,8 @@ def analyze_replay_dir(output_dir: Path | str, github_path: str, token: str | No
         f"- Scatter / Free Spin 回放: {len(free_spins)}",
         f"- 金色符号/百搭转换回放: {len(gold_transforms)}",
     ]
+
+    lines.extend(_majiang_error_section(majiang_issues))
 
     if top_replays:
         lines.extend([

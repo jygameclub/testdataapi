@@ -126,6 +126,111 @@ class Mahjong2ProcessTests(unittest.TestCase):
             self.assertIn("debugStart=4", analysis)
             self.assertIn("custom-token", analysis)
 
+    def test_analysis_puts_majiangerrorcheck_first_for_ptbr_rns_mismatch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out"
+            output.mkdir()
+            first = _full_record("100", st=1, nst=4)
+            first["wp"] = {"4": [2, 4, 8, 15]}
+            first["ptbr"] = [2, 4, 8, 15]
+            first["ssb"] = None
+            for position in first["ptbr"]:
+                first["rl"][position] = 4
+            second = _full_record("101", st=4, nst=1, psid="100")
+            second["rl"][15] = 0
+            second["wp"] = {"4": [1, 8, 12, 15, 24]}
+            second["ptbr"] = [1, 8, 12, 15, 24]
+            for position in second["ptbr"]:
+                second["rl"][position] = 4
+            second["rl"][15] = 0
+            second["rs"] = {"rns": [[2, 4], [9], [], [], []]}
+            _write_json(output / "001.json", [first, second])
+
+            analysis = analyze_replay_dir(output, "mahjong2date/test_batch", token="custom-token")
+
+            self.assertIn("majiangerrorcheck", analysis)
+            self.assertIn("rs.rns[2]", analysis)
+            self.assertIn("15", analysis)
+            self.assertLess(
+                analysis.index("### majiangerrorcheck 数据异常优先检查"),
+                analysis.index("### 重点测试回放建议"),
+            )
+
+    def test_analysis_flags_final_board_with_possible_win_when_server_ended(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out"
+            output.mkdir()
+            record = _full_record("200", st=1, nst=1)
+            record["wp"] = None
+            record["ptbr"] = []
+            record["rl"][1] = 4
+            record["rl"][8] = 4
+            record["rl"][15] = 4
+            _write_json(output / "001.json", [record])
+
+            analysis = analyze_replay_dir(output, "mahjong2date/test_batch")
+
+            self.assertIn("majiangerrorcheck", analysis)
+            self.assertIn("服务端已结束但盘面仍可中奖", analysis)
+
+    def test_analysis_flags_wp_position_that_does_not_match_board_symbol(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out"
+            output.mkdir()
+            record = _full_record("300", st=1, nst=4)
+            record["wp"] = {"4": [1, 8, 15]}
+            record["ptbr"] = [1, 8, 15]
+            record["rl"][1] = 4
+            record["rl"][8] = 4
+            record["rl"][15] = 7
+            _write_json(output / "001.json", [record])
+
+            analysis = analyze_replay_dir(output, "mahjong2date/test_batch")
+
+            self.assertIn("majiangerrorcheck", analysis)
+            self.assertIn("wp[4]", analysis)
+            self.assertIn("盘面符号=7", analysis)
+
+
+def _full_record(
+    sid: str,
+    st: int = 1,
+    nst: int = 1,
+    psid: str | None = None,
+) -> dict:
+    rl = []
+    for reel in range(5):
+        rl.extend([2 + reel] * 7)
+    hidden = {0, 5, 6, 7, 13, 14, 20, 21, 27, 28, 33, 34}
+    for index in hidden:
+        rl[index] = 1
+    return {
+        "sid": sid,
+        "psid": psid or sid,
+        "spinId": f"spin-{sid}",
+        "st": st,
+        "nst": nst,
+        "tb": 40 if st == 1 else 0,
+        "tbb": 40.0,
+        "cs": 2.0,
+        "ml": 1,
+        "aw": 0,
+        "ssaw": 0,
+        "tw": 0,
+        "ctw": 0,
+        "blb": 1000.0,
+        "blab": 960.0,
+        "bl": 960.0,
+        "wp": None,
+        "lw": None,
+        "rl": rl,
+        "sc": 0,
+        "fs": None,
+        "ptbr": [],
+        "ssb": [],
+        "ss": [],
+    }
+
 
 def _record(
     sid: str,
