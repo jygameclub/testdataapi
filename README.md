@@ -378,6 +378,7 @@ Anubis / Ox / Tiger 转换过程会从原始 spin 数据中提取 `si` 对象，
 
 | 批次 | 日期 | 数据文件 | 调试链接 |
 |------|------|---------|---------|
+| 0527_0025 | 05-27 00:25 | 001.json ~ validation_summary.json (1001个文件) | [批次回放](https://fish-games.s3.amazonaws.com/MahjongWays1/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=436475c81b51e6893c740657870f86b7&language=en&debug=1&debugDataPath=https://raw.githubusercontent.com/jygameclub/testdataapi/main/mahjong1date/0527_0025&debugStart=1) |
 | 0525_0853 | 05-25 08:53 | 001.json ~ validation_summary.json (1001个文件) | [批次回放](https://fish-games.s3.amazonaws.com/MahjongWays1/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=436475c81b51e6893c740657870f86b7&language=en&debug=1&debugDataPath=https://raw.githubusercontent.com/jygameclub/testdataapi/main/mahjong1date/0525_0853&debugStart=1) |
 | 0525_0842 | 05-25 08:42 | 001.json ~ validation_summary.json (1001个文件) | [批次回放](https://fish-games.s3.amazonaws.com/MahjongWays1/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=436475c81b51e6893c740657870f86b7&language=en&debug=1&debugDataPath=https://raw.githubusercontent.com/jygameclub/testdataapi/main/mahjong1date/0525_0842&debugStart=1) |
 
