@@ -186,6 +186,17 @@ def _float_value(value: Any) -> float:
         return 0.0
 
 
+def _total_win_value(records: Iterable[dict[str, Any]]) -> float:
+    values: list[float] = []
+    for record in records:
+        for key in ("aw", "ssaw", "tw", "ctw"):
+            values.append(_float_value(record.get(key)))
+        free_spin = record.get("fs")
+        if isinstance(free_spin, dict):
+            values.append(_float_value(free_spin.get("aw")))
+    return max(values, default=0.0)
+
+
 def _is_paid_bet(data: dict[str, Any]) -> bool:
     return _float_value(data.get("st")) == 1
 
@@ -235,7 +246,7 @@ def _manifest_group(file_name: str, entries: Iterable[dict[str, Any]]) -> dict[s
         "total_bet": first.get("tbb", 0),
         "start_balance": first.get("blb"),
         "end_balance": last.get("bl"),
-        "total_win": last.get("ssaw", last.get("aw", last.get("tw", 0))),
+        "total_win": _total_win_value(rows),
     }
 
 
@@ -775,11 +786,12 @@ def _majiang_error_checks_for_records(
 
 
 def _replay_json_paths(replay_dir: Path) -> list[Path]:
-    return [
+    paths = [
         path
         for path in sorted(replay_dir.glob("*.json"))
-        if path.name != "manifest.json"
+        if path.name not in {"manifest.json", VALIDATION_SUMMARY_FILE}
     ]
+    return sorted(paths, key=lambda path: (_file_index(path), path.name))
 
 
 def _majiang_error_checks_for_replay_dir(
@@ -899,12 +911,7 @@ def _majiang_error_section(issues: list[dict[str, Any]]) -> list[str]:
 def _final_win(records: list[dict[str, Any]]) -> float:
     if not records:
         return 0.0
-    last = records[-1]
-    for key in ("ssaw", "aw", "tw", "ctw"):
-        value = _float_value(last.get(key))
-        if value > 0:
-            return value
-    return max((_float_value(record.get("ssaw")) for record in records), default=0.0)
+    return _total_win_value(records)
 
 
 def _bet_amount(records: list[dict[str, Any]]) -> float:
@@ -1266,7 +1273,7 @@ def _summary_csv_row(summary: dict[str, Any]) -> dict[str, Any]:
 
 def _write_summary_csv(path: Path, summaries: list[dict[str, Any]]) -> None:
     with path.open("w", encoding="utf-8-sig", newline="") as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=CSV_COLUMNS)
+        writer = csv.DictWriter(csv_file, fieldnames=CSV_COLUMNS, lineterminator="\n")
         writer.writeheader()
         for summary in summaries:
             writer.writerow(_summary_csv_row(summary))
@@ -1274,11 +1281,7 @@ def _write_summary_csv(path: Path, summaries: list[dict[str, Any]]) -> None:
 
 def _replay_summaries(output_dir: Path | str, github_path: str, token: str | None = None) -> list[dict[str, Any]]:
     replay_dir = Path(output_dir)
-    replay_paths = [
-        path
-        for path in sorted(replay_dir.glob("*.json"))
-        if path.name != "manifest.json"
-    ]
+    replay_paths = _replay_json_paths(replay_dir)
     replay_start_lookup = _build_replay_start_index_lookup(replay_paths)
     return [
         _summarize_replay_file(

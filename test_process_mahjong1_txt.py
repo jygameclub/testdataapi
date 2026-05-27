@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 
 from process_mahjong1_txt import (
+    _final_win,
+    _manifest_group,
     _validate_record_transition,
     analyze_replay_dir,
     build_validation_blocked_markdown,
@@ -12,6 +14,7 @@ from process_mahjong1_txt import (
     is_mahjong1_title,
     process_txt,
     split_capture,
+    write_replay_csv_files,
 )
 
 
@@ -148,6 +151,23 @@ class Mahjong1ProcessTests(unittest.TestCase):
             finally:
                 shutil.rmtree(output, ignore_errors=True)
 
+    def test_analysis_ignores_validation_summary_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out"
+            output.mkdir()
+            (output / "001.json").write_text(json.dumps([_full_record("850", st=1)]), encoding="utf-8")
+            (output / "validation_summary.json").write_text(json.dumps({"has_errors": False}), encoding="utf-8")
+
+            analysis = analyze_replay_dir(output, "mahjong1date/test_batch")
+
+            self.assertIn("- 文件数: 1", analysis)
+            self.assertNotIn("validation_summary.json", analysis)
+            self.assertNotIn("RL_LENGTH", analysis)
+
+            write_replay_csv_files(output, "mahjong1date/test_batch")
+            all_replays = (output / "all_replays.csv").read_text(encoding="utf-8-sig")
+            self.assertNotIn("validation_summary.json", all_replays)
+
     def test_validation_blocked_markdown_does_not_emit_dead_raw_links(self):
         markdown = build_validation_blocked_markdown({
             "has_errors": True,
@@ -193,6 +213,22 @@ class Mahjong1ProcessTests(unittest.TestCase):
         )
 
         self.assertEqual([], issues)
+
+    def test_total_win_uses_mahjong1_accumulated_aw(self):
+        records = [
+            _record("1000", st=1, win=0),
+            _record("1001", st=21, win=16),
+            _record("1002", st=22, win=176),
+        ]
+        last = _full_record("1003", st=22, psid="1002")
+        last["aw"] = 192.0
+        last["ssaw"] = 16.0
+        last["tw"] = 0.0
+        last["ctw"] = 0.0
+        records.append(last)
+
+        self.assertEqual(_final_win(records), 192.0)
+        self.assertEqual(_manifest_group("126.json", records)["total_win"], 192.0)
 
 
 def _record(sid: str, st: int = 1, win: float = 0, psid: str | None = None) -> dict:
