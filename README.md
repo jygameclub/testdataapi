@@ -378,6 +378,7 @@ Anubis / Ox / Tiger 转换过程会从原始 spin 数据中提取 `si` 对象，
 
 | 批次 | 日期 | 数据文件 | 调试链接 |
 |------|------|---------|---------|
+| 0527_0025 | 05-27 00:25 | 001.json ~ validation_summary.json (1001个文件) | [批次回放](https://fish-games.s3.amazonaws.com/MahjongWays1/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=436475c81b51e6893c740657870f86b7&language=en&debug=1&debugDataPath=https://raw.githubusercontent.com/jygameclub/testdataapi/main/mahjong1date/0527_0025&debugStart=1) |
 | 0525_0853 | 05-25 08:53 | 001.json ~ validation_summary.json (1001个文件) | [批次回放](https://fish-games.s3.amazonaws.com/MahjongWays1/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=436475c81b51e6893c740657870f86b7&language=en&debug=1&debugDataPath=https://raw.githubusercontent.com/jygameclub/testdataapi/main/mahjong1date/0525_0853&debugStart=1) |
 | 0525_0842 | 05-25 08:42 | 001.json ~ validation_summary.json (1001个文件) | [批次回放](https://fish-games.s3.amazonaws.com/MahjongWays1/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=436475c81b51e6893c740657870f86b7&language=en&debug=1&debugDataPath=https://raw.githubusercontent.com/jygameclub/testdataapi/main/mahjong1date/0525_0842&debugStart=1) |
 
@@ -385,6 +386,7 @@ Anubis / Ox / Tiger 转换过程会从原始 spin 数据中提取 `si` 对象，
 
 | 批次 | 日期 | 数据文件 | 调试链接 |
 |------|------|---------|---------|
+| 0529_0619 | 05-29 06:19 | 001.json ~ validation_summary.json (1001个文件) | [批次回放](https://fish-games.s3.amazonaws.com/MahjongWays2/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=436475c81b51e6893c740657870f86b7&language=en&debug=1&debugDataPath=https://raw.githubusercontent.com/jygameclub/testdataapi/main/mahjong2date/0529_0619&debugStart=1) |
 | 0525_1407 | 05-25 14:07 | 001.json ~ 999.json (6003个文件) | [批次回放](https://fish-games.s3.amazonaws.com/MahjongWays2/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=6937d51c78fce0f2d29f93346f8c0f6e&language=en&debug=1&debugDataPath=https://raw.githubusercontent.com/jygameclub/testdataapi/main/mahjong2date/0525_1407&debugStart=1) |
 | 0525_0921 | 05-25 09:21 | 001.json ~ 100.json (100个文件) | [批次回放](https://fish-games.s3.amazonaws.com/MahjongWays2/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=436475c81b51e6893c740657870f86b7&language=en&debug=1&debugDataPath=https://raw.githubusercontent.com/jygameclub/testdataapi/main/mahjong2date/0525_0921&debugStart=1) |
 | 0525_0910 | 05-25 09:10 | 001.json ~ 100.json (100个文件) | [批次回放](https://fish-games.s3.amazonaws.com/MahjongWays2/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=436475c81b51e6893c740657870f86b7&language=en&debug=1&debugDataPath=https://raw.githubusercontent.com/jygameclub/testdataapi/main/mahjong2date/0525_0910&debugStart=1) |
