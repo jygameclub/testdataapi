@@ -1,0 +1,1038 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>客户端如何实现测试数据集回放</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230f766e'/%3E%3Cpath d='M10 8v16l13-8z' fill='white'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --paper: #ffffff;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #d8dee8;
+      --accent: #0f766e;
+      --accent-2: #1d4ed8;
+      --warn: #b45309;
+      --danger: #b42318;
+      --good: #15803d;
+      --code-bg: #111827;
+      --code-text: #e5eefc;
+      --soft: #eef7f6;
+      --blue-soft: #eef4ff;
+      --orange-soft: #fff7ed;
+      --red-soft: #fef3f2;
+      --green-soft: #f0fdf4;
+      --shadow: 0 18px 45px rgba(23, 32, 51, 0.08);
+      --radius: 8px;
+      font-family: Inter, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(180deg, #eef7f6 0, #f6f7f9 320px),
+        var(--bg);
+      line-height: 1.65;
+    }
+
+    a {
+      color: var(--accent-2);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .page {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    header {
+      padding: 44px 0 28px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      width: 9px;
+      height: 9px;
+      content: "";
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 5px rgba(15, 118, 110, 0.12);
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 880px;
+      font-size: clamp(34px, 5vw, 62px);
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 880px;
+      margin: 18px 0 0;
+      color: #475467;
+      font-size: 19px;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
+      gap: 22px;
+      align-items: stretch;
+      margin-top: 30px;
+    }
+
+    .panel,
+    .card {
+      min-width: 0;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .panel {
+      padding: 24px;
+    }
+
+    .hero-summary {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .metric {
+      min-width: 0;
+      min-height: 112px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fbfcfe;
+    }
+
+    .metric strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 28px;
+      line-height: 1;
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      border-top: 1px solid rgba(216, 222, 232, 0.8);
+      border-bottom: 1px solid rgba(216, 222, 232, 0.8);
+      background: rgba(246, 247, 249, 0.92);
+      backdrop-filter: blur(12px);
+    }
+
+    nav .page {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding: 9px 0;
+    }
+
+    nav a {
+      flex: 0 0 auto;
+      padding: 8px 12px;
+      color: #344054;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
+    nav a:hover {
+      background: #e8eef6;
+      text-decoration: none;
+    }
+
+    main {
+      padding: 28px 0 72px;
+    }
+
+    section {
+      margin-top: 34px;
+    }
+
+    section > h2 {
+      margin: 0 0 14px;
+      font-size: 28px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    section > p {
+      max-width: 900px;
+      margin: 0 0 16px;
+      color: #475467;
+    }
+
+    .section-band {
+      min-width: 0;
+      padding: 28px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .hero-grid > *,
+    .hero-summary > *,
+    .grid-2 > *,
+    .grid-3 > *,
+    .checklist > *,
+    .decision > * {
+      min-width: 0;
+    }
+
+    .card {
+      padding: 18px;
+      box-shadow: none;
+    }
+
+    .card h3 {
+      margin: 0 0 8px;
+      font-size: 18px;
+      line-height: 1.3;
+    }
+
+    .card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 28px;
+      height: 28px;
+      margin-bottom: 12px;
+      padding: 0 9px;
+      color: #fff;
+      border-radius: 999px;
+      background: var(--accent);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .badge.blue {
+      background: var(--accent-2);
+    }
+
+    .badge.warn {
+      background: var(--warn);
+    }
+
+    .badge.good {
+      background: var(--good);
+    }
+
+    .callout {
+      margin: 18px 0;
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      border-left: 5px solid var(--accent);
+      border-radius: var(--radius);
+      background: var(--soft);
+    }
+
+    .callout.warn {
+      border-left-color: var(--warn);
+      background: var(--orange-soft);
+    }
+
+    .callout.danger {
+      border-left-color: var(--danger);
+      background: var(--red-soft);
+    }
+
+    .callout.good {
+      border-left-color: var(--good);
+      background: var(--green-soft);
+    }
+
+    .callout strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    ul,
+    ol {
+      margin: 10px 0 0;
+      padding-left: 22px;
+    }
+
+    li + li {
+      margin-top: 7px;
+    }
+
+    code {
+      padding: 2px 5px;
+      border-radius: 5px;
+      background: #eef2f7;
+      color: #243047;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.92em;
+      word-break: break-word;
+    }
+
+    pre {
+      max-width: 100%;
+      margin: 14px 0 0;
+      padding: 16px;
+      overflow: auto;
+      color: var(--code-text);
+      background: var(--code-bg);
+      border-radius: var(--radius);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    pre code {
+      padding: 0;
+      color: inherit;
+      background: transparent;
+      word-break: normal;
+    }
+
+    .flow {
+      width: 100%;
+      margin: 8px 0 18px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+    }
+
+    .flow svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .swimlane {
+      display: grid;
+      grid-template-columns: 150px repeat(4, minmax(150px, 1fr));
+      gap: 10px;
+      align-items: stretch;
+      margin-top: 14px;
+    }
+
+    .lane-title,
+    .lane-step {
+      min-height: 86px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      font-size: 13px;
+    }
+
+    .lane-title {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      background: #344054;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .lane-step strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--ink);
+      font-size: 14px;
+    }
+
+    .lane-step {
+      color: var(--muted);
+    }
+
+    .decision {
+      display: grid;
+      grid-template-columns: 1fr 140px 1fr;
+      gap: 14px;
+      align-items: center;
+      margin-top: 16px;
+    }
+
+    .diamond {
+      display: grid;
+      width: 126px;
+      height: 126px;
+      place-items: center;
+      justify-self: center;
+      transform: rotate(45deg);
+      border: 2px solid #7c3aed;
+      border-radius: 8px;
+      background: #f5f3ff;
+    }
+
+    .diamond span {
+      max-width: 88px;
+      transform: rotate(-45deg);
+      color: #5b21b6;
+      font-weight: 800;
+      text-align: center;
+      line-height: 1.25;
+    }
+
+    .arrow-label {
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    .checklist {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .check {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 10px;
+      align-items: start;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+    }
+
+    .check::before {
+      display: grid;
+      width: 24px;
+      height: 24px;
+      place-items: center;
+      content: "✓";
+      color: #fff;
+      border-radius: 50%;
+      background: var(--good);
+      font-weight: 900;
+    }
+
+    .check strong {
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .check span {
+      display: block;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    table {
+      width: 100%;
+      margin-top: 14px;
+      border-collapse: collapse;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: #344054;
+      background: #f2f5f9;
+      font-weight: 800;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .footer {
+      margin-top: 36px;
+      padding: 22px 0 42px;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      font-size: 13px;
+    }
+
+    @media (max-width: 920px) {
+      .hero-grid,
+      .grid-2,
+      .grid-3,
+      .decision,
+      .checklist {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-summary {
+        grid-template-columns: 1fr;
+      }
+
+      .swimlane {
+        grid-template-columns: 1fr;
+      }
+
+      .lane-title,
+      .lane-step {
+        min-height: auto;
+      }
+
+      pre {
+        white-space: pre-wrap;
+      }
+
+      pre code {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      .flow {
+        overflow-x: auto;
+      }
+
+      .flow svg {
+        min-width: 720px;
+      }
+    }
+
+    @media print {
+      nav {
+        display: none;
+      }
+
+      body {
+        background: #fff;
+      }
+
+      .panel,
+      .card,
+      .section-band {
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="page">
+      <div class="eyebrow">Replay Dataset Tutorial</div>
+      <h1>客户端如何实现测试数据集回放</h1>
+      <p class="lead">
+        这份教程说明一个完整闭环：客户端先支持按 URL 参数进入回放模式；测试人员从 Chrome DevTools 导出 HAR 或抓包数据；转换脚本把原始数据拆成客户端可读的回放目录；GitHub Issue 自动触发校验、提交数据，并返回可点击的 WebGL 测试链接。
+      </p>
+      <div class="hero-grid">
+        <div class="panel">
+          <div class="flow" aria-label="测试数据集回放总流程图">
+            <svg viewBox="0 0 980 300" role="img">
+              <defs>
+                <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+                  <path d="M0,0 L0,6 L9,3 z" fill="#475467"></path>
+                </marker>
+                <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+                  <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#172033" flood-opacity="0.12"></feDropShadow>
+                </filter>
+              </defs>
+              <rect width="980" height="300" fill="#ffffff"></rect>
+              <text x="34" y="42" fill="#172033" font-size="22" font-weight="800">端到端链路</text>
+              <text x="34" y="70" fill="#667085" font-size="14">从线上请求到可复现的客户端回放 URL</text>
+
+              <g filter="url(#shadow)">
+                <rect x="36" y="112" width="130" height="96" rx="8" fill="#eef7f6" stroke="#99d4ce"></rect>
+                <text x="101" y="145" text-anchor="middle" fill="#0f766e" font-size="16" font-weight="800">抓 HAR</text>
+                <text x="101" y="172" text-anchor="middle" fill="#475467" font-size="12">Chrome Network</text>
+              </g>
+              <line x1="166" y1="160" x2="218" y2="160" stroke="#475467" stroke-width="2" marker-end="url(#arrow)"></line>
+
+              <g filter="url(#shadow)">
+                <rect x="224" y="112" width="130" height="96" rx="8" fill="#eef4ff" stroke="#adc6ff"></rect>
+                <text x="289" y="145" text-anchor="middle" fill="#1d4ed8" font-size="16" font-weight="800">转换</text>
+                <text x="289" y="172" text-anchor="middle" fill="#475467" font-size="12">JSONL / split</text>
+              </g>
+              <line x1="354" y1="160" x2="406" y2="160" stroke="#475467" stroke-width="2" marker-end="url(#arrow)"></line>
+
+              <g filter="url(#shadow)">
+                <rect x="412" y="112" width="130" height="96" rx="8" fill="#fff7ed" stroke="#fdba74"></rect>
+                <text x="477" y="145" text-anchor="middle" fill="#b45309" font-size="16" font-weight="800">Issue 上传</text>
+                <text x="477" y="172" text-anchor="middle" fill="#475467" font-size="12">标题匹配 workflow</text>
+              </g>
+              <line x1="542" y1="160" x2="594" y2="160" stroke="#475467" stroke-width="2" marker-end="url(#arrow)"></line>
+
+              <g filter="url(#shadow)">
+                <rect x="600" y="112" width="130" height="96" rx="8" fill="#f5f3ff" stroke="#c4b5fd"></rect>
+                <text x="665" y="145" text-anchor="middle" fill="#6d28d9" font-size="16" font-weight="800">Action 校验</text>
+                <text x="665" y="172" text-anchor="middle" fill="#475467" font-size="12">validation_summary</text>
+              </g>
+              <line x1="730" y1="160" x2="782" y2="160" stroke="#475467" stroke-width="2" marker-end="url(#arrow)"></line>
+
+              <g filter="url(#shadow)">
+                <rect x="788" y="112" width="150" height="96" rx="8" fill="#f0fdf4" stroke="#86efac"></rect>
+                <text x="863" y="145" text-anchor="middle" fill="#15803d" font-size="16" font-weight="800">返回测试链接</text>
+                <text x="863" y="172" text-anchor="middle" fill="#475467" font-size="12">debugDataPath</text>
+              </g>
+
+              <path d="M665 208 C665 244 590 250 477 228 C360 204 270 222 180 248" fill="none" stroke="#b42318" stroke-width="2" stroke-dasharray="8 8" marker-end="url(#arrow)"></path>
+              <text x="486" y="258" text-anchor="middle" fill="#b42318" font-size="13" font-weight="700">校验失败：阻断提交，只返回错误摘要</text>
+            </svg>
+          </div>
+          <div class="callout good">
+            <strong>一句话版本</strong>
+            客户端只认一个稳定协议：<code>debug=1</code> 打开回放，<code>debugDataPath</code> 指向测试数据目录，<code>debugStart</code> 决定从第几局开始。
+          </div>
+        </div>
+        <div class="panel">
+          <div class="hero-summary">
+            <div class="metric">
+              <strong>1</strong>
+              <span>客户端必须先实现回放入口和 API 替身，否则测试链接打不开真实局面。</span>
+            </div>
+            <div class="metric">
+              <strong>2</strong>
+              <span>数据可以来自自己游戏或竞品游戏的 HAR，需要转换成统一回放格式。</span>
+            </div>
+            <div class="metric">
+              <strong>3</strong>
+              <span>GitHub Actions 负责自动转换、校验、提交，并在 Issue 里返回链接。</span>
+            </div>
+          </div>
+          <pre><code>https://fish-games.s3.amazonaws.com/MahjongWays2/index.html
+  ?env=ceshislot.osshaiwai.com
+  &hasFloat=0
+  &token=436475c81b51e6893c740657870f86b7
+  &language=en
+  &debug=1
+  &debugDataPath=https://raw.githubusercontent.com/jygameclub/testdataapi/main/mahjong2date/0525_1407
+  &debugStart=1</code></pre>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <nav>
+    <div class="page">
+      <a href="#client">客户端实现</a>
+      <a href="#capture">如何拿数据</a>
+      <a href="#format">回放数据格式</a>
+      <a href="#github">GitHub 自动化</a>
+      <a href="#errors">错误和校验</a>
+      <a href="#acceptance">验收清单</a>
+    </div>
+  </nav>
+
+  <main class="page">
+    <section id="client">
+      <h2>1. 客户端需要先实现数据回放功能</h2>
+      <p>
+        数据平台只能返回链接，真正让链接生效的是客户端。客户端要在启动时识别调试参数，跳过正常服务端请求，把回放目录里的 JSON 按顺序喂给原有业务逻辑。
+      </p>
+      <div class="section-band">
+        <div class="grid-3">
+          <div class="card">
+            <span class="badge">A</span>
+            <h3>URL 参数入口</h3>
+            <p>识别 <code>debug=1</code>、<code>debugDataPath</code>、<code>debugStart</code>、<code>token</code>。没有 debug 时走正常线上逻辑。</p>
+          </div>
+          <div class="card">
+            <span class="badge blue">B</span>
+            <h3>回放数据加载器</h3>
+            <p>先读取 <code>manifest.json</code>，再按顺序加载 <code>001.json</code>、<code>002.json</code>。Editor 可以支持本地目录，WebGL 推荐 HTTP 目录。</p>
+          </div>
+          <div class="card">
+            <span class="badge warn">C</span>
+            <h3>API 替身</h3>
+            <p>把原来请求服务器的入口改成“如果 debug 开启，就从回放队列取下一条响应”。业务层仍然收到和服务端一样的 spin 数据。</p>
+          </div>
+        </div>
+
+        <div class="swimlane" aria-label="客户端回放时序图">
+          <div class="lane-title">WebGL URL</div>
+          <div class="lane-step"><strong>解析参数</strong><code>debug=1</code><br><code>debugDataPath=...</code></div>
+          <div class="lane-step"><strong>初始化配置</strong>保存 token、起始局数、数据目录。</div>
+          <div class="lane-step"><strong>传给 Unity</strong>通过启动变量或 WebCallback 进入 C#。</div>
+          <div class="lane-step"><strong>进入回放模式</strong>正常服务器请求被替换。</div>
+
+          <div class="lane-title">Replay Loader</div>
+          <div class="lane-step"><strong>读取 manifest</strong>确认文件顺序、数量、分组信息。</div>
+          <div class="lane-step"><strong>跳到起点</strong><code>debugStart=10</code> 就从第 10 个 bet 开始。</div>
+          <div class="lane-step"><strong>加载 JSON</strong>远端 raw URL 或本地 HTTP 文件。</div>
+          <div class="lane-step"><strong>维护游标</strong>每次 spin 消费一条或一组响应。</div>
+
+          <div class="lane-title">Game Logic</div>
+          <div class="lane-step"><strong>下注</strong>玩家点击 spin，流程不变。</div>
+          <div class="lane-step"><strong>拿响应</strong>API 层返回回放数据。</div>
+          <div class="lane-step"><strong>播放表现</strong>盘面、连消、免费旋转、中奖动画复现。</div>
+          <div class="lane-step"><strong>记录日志</strong>错误时输出文件名、entry、sid。</div>
+        </div>
+
+        <div class="callout warn">
+          <strong>实现边界</strong>
+          回放功能应该只在开发、测试或带明确 debug 参数的环境开启。不要让生产用户无意中通过任意 URL 读取外部测试数据。
+        </div>
+      </div>
+    </section>
+
+    <section id="capture">
+      <h2>2. 如何拿到原始数据</h2>
+      <p>
+        原始数据通常来自浏览器网络请求。可以抓自己游戏的线上数据，也可以抓对标游戏的数据做表现对齐，但要注意权限、账号、隐私和内部合规要求。
+      </p>
+      <div class="section-band">
+        <div class="grid-2">
+          <div>
+            <h3>Chrome DevTools 导出 HAR</h3>
+            <ol>
+              <li>打开游戏页面，按 <code>F12</code> 或右键选择 Inspect。</li>
+              <li>进入 <strong>Network</strong> 面板，勾选 <strong>Preserve log</strong>。</li>
+              <li>过滤 <code>fetch</code> / <code>XHR</code>，开始实际下注或触发你要看的玩法。</li>
+              <li>操作几局后，在 Network 列表右键选择 <strong>Save all as HAR with content</strong>。</li>
+              <li>把 <code>.har</code> 交给转换脚本，抽取 spin 请求或响应。</li>
+            </ol>
+          </div>
+          <div>
+            <h3>需要保留的信息</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>字段</th>
+                  <th>用途</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>请求或响应 JSON</td>
+                  <td>提取 <code>data</code>、<code>dt.si</code> 或直接 spin 对象。</td>
+                </tr>
+                <tr>
+                  <td><code>sid</code> / spin id</td>
+                  <td>定位单局问题，错误报告里可以直接追到服务器回合。</td>
+                </tr>
+                <tr>
+                  <td><code>rl</code> / <code>wp</code> / <code>ptbr</code></td>
+                  <td>客户端盘面、中奖线、消除和补牌校验的核心字段。</td>
+                </tr>
+                <tr>
+                  <td><code>st</code> / <code>nst</code> / <code>tb</code></td>
+                  <td>判断新 bet、连消、免费旋转、续转链。</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="callout">
+          <strong>转换目标</strong>
+          HAR 不是客户端最终使用的格式。转换脚本要把 HAR 里的有效 spin 数据提取出来，转成每行一个 JSON 的 capture 文件，或直接拆成回放目录。
+        </div>
+      </div>
+    </section>
+
+    <section id="format">
+      <h2>3. 转成客户端可回放的数据格式</h2>
+      <p>
+        推荐使用“目录回放”格式：一个批次目录代表一次上传，一个 bet 或一组连续响应写成一个 JSON 文件，客户端通过 <code>manifest.json</code> 获取顺序。
+      </p>
+      <div class="section-band">
+        <div class="grid-2">
+          <div>
+            <h3>目录结构</h3>
+            <pre><code>mahjong2date/0525_1407/
+├── manifest.json
+├── 001.json
+├── 002.json
+├── 003.json
+├── analysis.md
+├── validation_summary.json
+├── recommended_replays.csv
+├── all_replays.csv
+└── url.txt</code></pre>
+          </div>
+          <div>
+            <h3>manifest 示例</h3>
+            <pre><code>{
+  "source": "xxbet_capture_20260529.txt",
+  "mode": "bet",
+  "files_written": 100,
+  "requests_written": 286,
+  "groups": [
+    {
+      "file": "001.json",
+      "request_count": 3,
+      "sid": "672639"
+    }
+  ]
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="grid-3" style="margin-top: 16px;">
+          <div class="card">
+            <span class="badge good">1</span>
+            <h3><code>001.json</code> 等回放文件</h3>
+            <p>保存客户端要消费的服务端响应。Mahjong 类数据一般按“实际扣费 bet”拆分，连消和免费旋转续转保留在同一组。</p>
+          </div>
+          <div class="card">
+            <span class="badge good">2</span>
+            <h3><code>analysis.md</code></h3>
+            <p>给人看的摘要：重点测试回合、Big/Mega/Super Win、连消、多线中奖、Scatter/FreeSpin、金色符号等。</p>
+          </div>
+          <div class="card">
+            <span class="badge good">3</span>
+            <h3><code>validation_summary.json</code></h3>
+            <p>给机器看的校验结果。GitHub Actions 只读这个 JSON 决定是否允许提交，不解析 Markdown。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="github">
+      <h2>4. 通过 GitHub Issue 自动处理并返回测试链接</h2>
+      <p>
+        GitHub 仓库负责把“上传数据”变成“可点击测试链接”。当前仓库的实现思路是：Issue 标题决定走哪个 workflow，Issue 正文附件提供数据源，Action 处理成功后提交批次目录，再把 <code>url.txt</code> 评论回 Issue。
+      </p>
+      <div class="section-band">
+        <div class="flow" aria-label="GitHub Actions 自动处理图">
+          <svg viewBox="0 0 980 360" role="img">
+            <defs>
+              <marker id="arrow2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L9,3 z" fill="#344054"></path>
+              </marker>
+            </defs>
+            <rect width="980" height="360" fill="#ffffff"></rect>
+            <text x="34" y="44" fill="#172033" font-size="22" font-weight="800">Issue 到测试链接</text>
+            <text x="34" y="72" fill="#667085" font-size="14">标题路由 + 附件下载 + 数据校验 + 条件提交</text>
+
+            <rect x="48" y="122" width="150" height="76" rx="8" fill="#eef7f6" stroke="#99d4ce"></rect>
+            <text x="123" y="154" text-anchor="middle" fill="#0f766e" font-size="15" font-weight="800">新建 Issue</text>
+            <text x="123" y="177" text-anchor="middle" fill="#475467" font-size="12">标题含 mahjong2</text>
+
+            <line x1="198" y1="160" x2="246" y2="160" stroke="#344054" stroke-width="2" marker-end="url(#arrow2)"></line>
+            <rect x="254" y="122" width="150" height="76" rx="8" fill="#eef4ff" stroke="#adc6ff"></rect>
+            <text x="329" y="154" text-anchor="middle" fill="#1d4ed8" font-size="15" font-weight="800">提取附件</text>
+            <text x="329" y="177" text-anchor="middle" fill="#475467" font-size="12">.txt / .zip URL</text>
+
+            <line x1="404" y1="160" x2="452" y2="160" stroke="#344054" stroke-width="2" marker-end="url(#arrow2)"></line>
+            <rect x="460" y="122" width="150" height="76" rx="8" fill="#fff7ed" stroke="#fdba74"></rect>
+            <text x="535" y="154" text-anchor="middle" fill="#b45309" font-size="15" font-weight="800">运行脚本</text>
+            <text x="535" y="177" text-anchor="middle" fill="#475467" font-size="12">process_file()</text>
+
+            <line x1="610" y1="160" x2="658" y2="160" stroke="#344054" stroke-width="2" marker-end="url(#arrow2)"></line>
+            <rect x="666" y="122" width="150" height="76" rx="8" fill="#f5f3ff" stroke="#c4b5fd"></rect>
+            <text x="741" y="154" text-anchor="middle" fill="#6d28d9" font-size="15" font-weight="800">读取校验</text>
+            <text x="741" y="177" text-anchor="middle" fill="#475467" font-size="12">has_errors?</text>
+
+            <path d="M741 198 L741 242 L613 242" fill="none" stroke="#15803d" stroke-width="2" marker-end="url(#arrow2)"></path>
+            <rect x="446" y="226" width="160" height="78" rx="8" fill="#f0fdf4" stroke="#86efac"></rect>
+            <text x="526" y="258" text-anchor="middle" fill="#15803d" font-size="15" font-weight="800">通过</text>
+            <text x="526" y="281" text-anchor="middle" fill="#475467" font-size="12">commit / push</text>
+
+            <path d="M606 265 L690 265 L690 304 L816 304" fill="none" stroke="#15803d" stroke-width="2" marker-end="url(#arrow2)"></path>
+            <rect x="822" y="266" width="120" height="66" rx="8" fill="#f0fdf4" stroke="#86efac"></rect>
+            <text x="882" y="293" text-anchor="middle" fill="#15803d" font-size="15" font-weight="800">评论链接</text>
+            <text x="882" y="315" text-anchor="middle" fill="#475467" font-size="12">cat url.txt</text>
+
+            <path d="M816 160 L894 160 L894 92" fill="none" stroke="#b42318" stroke-width="2" marker-end="url(#arrow2)"></path>
+            <rect x="770" y="28" width="174" height="64" rx="8" fill="#fef3f2" stroke="#fda29b"></rect>
+            <text x="857" y="54" text-anchor="middle" fill="#b42318" font-size="15" font-weight="800">失败</text>
+            <text x="857" y="75" text-anchor="middle" fill="#475467" font-size="12">评论错误摘要，不提交</text>
+          </svg>
+        </div>
+
+        <div class="grid-2">
+          <div>
+            <h3>Issue 示例</h3>
+            <pre><code>标题：
+Mahjong2 测试数据 2026-05-29
+
+正文：
+请处理这批数据。
+
+token: 6937d51c78fce0f2d29f93346f8c0f6e
+
+附件：
+把 xxbet_capture_20260529.txt 或 zip 直接拖到正文里。</code></pre>
+          </div>
+          <div>
+            <h3>成功评论会包含</h3>
+            <pre><code>✅ Mahjong2 数据处理完成！共 100 个回放文件。
+
+https://raw.githubusercontent.com/.../mahjong2date/0529_1530
+https://raw.githubusercontent.com/.../mahjong2date/0529_1530/manifest.json
+
+https://fish-games.s3.amazonaws.com/MahjongWays2/index.html?...&debug=1&debugDataPath=...&debugStart=1
+
+https://raw.githubusercontent.com/.../recommended_replays.csv
+https://raw.githubusercontent.com/.../all_replays.csv</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="errors">
+      <h2>5. 错误检查和失败返回</h2>
+      <p>
+        自动化平台不能只负责生成链接，还要防止坏数据进入主回放目录。当前 Mahjong 流程会把高危错误写入 <code>validation_summary.json</code>，Action 根据 <code>has_errors</code> 决定是否阻断提交。
+      </p>
+      <div class="section-band">
+        <div class="decision">
+          <div class="card">
+            <span class="badge good">通过</span>
+            <h3><code>has_errors=false</code></h3>
+            <p>提交 <code>mahjong1date/</code> 或 <code>mahjong2date/</code> 批次目录，更新 README 导航，在 Issue 评论中返回可用 raw URL 和 WebGL 回放链接。</p>
+          </div>
+          <div>
+            <div class="diamond"><span>校验结果</span></div>
+            <div class="arrow-label">读取 validation_summary.json</div>
+          </div>
+          <div class="card">
+            <span class="badge warn">阻断</span>
+            <h3><code>has_errors=true</code></h3>
+            <p>不执行 commit/push，只把错误数量、首个问题、文件、entry、sid、错误类型和说明写回 Issue，避免坏数据污染测试链接。</p>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>错误码</th>
+              <th>含义</th>
+              <th>为什么要阻断</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>WP_WAYS_MISMATCH</code></td>
+              <td><code>wp</code> 和当前 <code>rl</code> 盘面推导出的 Ways 中奖位置不一致。</td>
+              <td>客户端消除位置会和服务端数据不一致，动画和结算都可能错。</td>
+            </tr>
+            <tr>
+              <td><code>NEXT_RL_RESTORE_MISMATCH</code></td>
+              <td>上一条消除、金色转 Wild、当前 <code>rs.rns</code> 不能还原下一条 <code>rl</code>。</td>
+              <td>连消补牌后客户端盘面可能和服务端不同步。</td>
+            </tr>
+            <tr>
+              <td><code>TRUNCATED_CONTINUE_STATE</code></td>
+              <td>bet 文件最后一条仍是继续状态，但没有下一条数据。</td>
+              <td>客户端会继续请求下一条响应，回放队列已经没数据。</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout danger">
+          <strong>失败时为什么没有可用 raw 链接</strong>
+          因为失败批次不会 push 到 GitHub。目录没有提交时，<code>debugDataPath</code> 指向 GitHub raw 会 404。需要本地复现时，先在本地生成目录，再用本地 HTTP 服务把 <code>debugDataPath</code> 指向本机地址。
+        </div>
+      </div>
+    </section>
+
+    <section id="acceptance">
+      <h2>6. 最小验收清单</h2>
+      <p>
+        这个流程是否真正可用，可以用下面清单验收。不要只看 Action 成功，要确认客户端能消费数据并复现表现。
+      </p>
+      <div class="section-band">
+        <div class="checklist">
+          <div class="check">
+            <div>
+              <strong>URL 参数生效</strong>
+              <span><code>debug=1</code> 后客户端进入回放模式；去掉 debug 后恢复正常联网请求。</span>
+            </div>
+          </div>
+          <div class="check">
+            <div>
+              <strong>manifest 可访问</strong>
+              <span>浏览器打开 <code>{debugDataPath}/manifest.json</code> 返回 200，不是 404 或跨域失败。</span>
+            </div>
+          </div>
+          <div class="check">
+            <div>
+              <strong>debugStart 可跳转</strong>
+              <span><code>debugStart=20</code> 能直接从第 20 个回放文件开始，方便定位单局问题。</span>
+            </div>
+          </div>
+          <div class="check">
+            <div>
+              <strong>重点回合可复现</strong>
+              <span>Big/Mega/Super Win、连消、FreeSpin、金色符号等重点样本可以按 analysis 推荐链接打开。</span>
+            </div>
+          </div>
+          <div class="check">
+            <div>
+              <strong>错误数据被阻断</strong>
+              <span>人为构造 <code>validation_summary.has_errors=true</code> 的数据时，Action 不提交目录，只评论错误摘要。</span>
+            </div>
+          </div>
+          <div class="check">
+            <div>
+              <strong>Issue 状态可流转</strong>
+              <span>成功后自动打 <code>待修复</code> 标签；开发回复“程序已修复”，测试回复“测试已经验证”。</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout">
+          <strong>推荐落地顺序</strong>
+          先让客户端支持本地目录回放，再接入远端 raw URL；先跑一条最小 JSON，再跑真实 HAR 转换后的批量数据；最后把 GitHub Issue 自动化接进团队流程。
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div>文档文件：<code>docs/client-replay-tutorial.html</code>。内容基于当前 <code>testdataapi</code> 的 Issue 上传、<code>debugDataPath</code> 回放、<code>validation_summary.json</code> 阻断流程整理。</div>
+    </footer>
+  </main>
+</body>
+</html>
