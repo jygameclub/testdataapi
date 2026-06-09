@@ -1,0 +1,11 @@
+au_dup_sid_215_216_upload.txt
+https://raw.githubusercontent.com/jygameclub/testdataapi/main/anubisdate/0609_1041/au_dup_sid_215_216_upload.txt
+https://fish-games.s3.amazonaws.com/Anubis/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=b3bb96ff1faef019504b83495ec3e45a&language=en&debug=1&debugDataUrl=https://raw.githubusercontent.com/jygameclub/testdataapi/main/anubisdate/0609_1041/au_dup_sid_215_216_upload.txt&debugStart=207
+https://fish-games.s3.amazonaws.com/Anubis/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=b3bb96ff1faef019504b83495ec3e45a&language=en&debug=1&debugDataUrl=https://raw.githubusercontent.com/jygameclub/testdataapi/main/anubisdate/0609_1041/au_dup_sid_215_216_upload.txt&debugStart=215
+https://fish-games.s3.amazonaws.com/Anubis/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=b3bb96ff1faef019504b83495ec3e45a&language=en&debug=1&debugDataUrl=https://raw.githubusercontent.com/jygameclub/testdataapi/main/anubisdate/0609_1041/au_dup_sid_215_216_upload.txt&debugStart=216
+
+au_multiplier_mismatch_216_upload.txt
+https://raw.githubusercontent.com/jygameclub/testdataapi/main/anubisdate/0609_1041/au_multiplier_mismatch_216_upload.txt
+https://fish-games.s3.amazonaws.com/Anubis/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=b3bb96ff1faef019504b83495ec3e45a&language=en&debug=1&debugDataUrl=https://raw.githubusercontent.com/jygameclub/testdataapi/main/anubisdate/0609_1041/au_multiplier_mismatch_216_upload.txt&debugStart=207
+https://fish-games.s3.amazonaws.com/Anubis/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=b3bb96ff1faef019504b83495ec3e45a&language=en&debug=1&debugDataUrl=https://raw.githubusercontent.com/jygameclub/testdataapi/main/anubisdate/0609_1041/au_multiplier_mismatch_216_upload.txt&debugStart=215
+https://fish-games.s3.amazonaws.com/Anubis/index.html?env=ceshislot.osshaiwai.com&hasFloat=0&token=b3bb96ff1faef019504b83495ec3e45a&language=en&debug=1&debugDataUrl=https://raw.githubusercontent.com/jygameclub/testdataapi/main/anubisdate/0609_1041/au_multiplier_mismatch_216_upload.txt&debugStart=216
