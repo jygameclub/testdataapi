@@ -1,0 +1,3 @@
+https://raw.githubusercontent.com/jygameclub/testdataapi/main/anubisdate/0610_0959_anubis_multiplier_calc_test/au_har_upload.txt
+
+https://unity-feiwindevelopment.s3.amazonaws.com/16/index.html?env=gamenew2new.game9six.com&hasFloat=0&token=39db0e84c36e738276b831167dc510c1&v=3&debug=1&debugDataUrl=https://raw.githubusercontent.com/jygameclub/testdataapi/main/anubisdate/0610_0959_anubis_multiplier_calc_test/au_har_upload.txt&debugStart=158
